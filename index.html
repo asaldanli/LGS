@@ -145,6 +145,8 @@ button{cursor:pointer;font-family:'Nunito','Segoe UI',sans-serif}
         </label>
       </div>
       <div id="upload-msg" style="font-size:12px;font-weight:700;text-align:center;margin-top:8px;min-height:18px"></div>
+      <button onclick="backupAndSend()" style="width:100%;padding:11px;border-radius:14px;border:2px solid #ef4444;background:white;color:#dc2626;font-size:12px;font-weight:800;font-family:Nunito,sans-serif;margin-top:8px;cursor:pointer">💾 Tüm Verileri Yedekle</button>
+      <div id="backup-msg" style="font-size:11px;font-weight:700;text-align:center;margin-top:6px;min-height:16px"></div>
     </div>
   </div>
 </div>
@@ -229,6 +231,8 @@ var PASSWORDS = {
 };
 // Profil resimleri (Firebase'den yüklenir)
 var PROFILE_PICS = { omer: null, zeynep: null };
+
+var BACKUP_PASSWORD = "301185";
 
 var SUBJ = [
   {id:"matematik", n:"Matematik",      e:"📐",c:"#FF6B6B",bg:"#FFF0F0",li:"#FFE0E0"},
@@ -2196,6 +2200,115 @@ function cmpCard(){}  // legacy stub
 function bigCmpCard(){ return ""; } // legacy stub
 
 
+
+
+// ═══════════════════════════════════════════════════════════════════
+//  VERİ YEDEKLEMESİ
+// ═══════════════════════════════════════════════════════════════════
+var _backupPending = false;
+
+function backupAndSend(){
+  if(_backupPending) return;
+  // Ask for password
+  var pw = prompt("Yedekleme şifresi:");
+  if(pw === null) return;
+  if(pw !== BACKUP_PASSWORD){
+    setBackupMsg("❌ Yanlış şifre.","#ef4444");
+    return;
+  }
+  _backupPending = true;
+  setBackupMsg("⏳ Veriler toplanıyor...","#f59e0b");
+  if(!db){ setBackupMsg("❌ Veritabanı bağlantısı yok.","#ef4444"); _backupPending=false; return; }
+
+  var allData = {omer:{}, zeynep:{}};
+  var loaded = 0;
+  ["omer","zeynep"].forEach(function(sid){
+    db.ref("records/"+sid).once("value", function(snap){
+      allData[sid] = snap.val()||{};
+      loaded++;
+      if(loaded===2) generateBackupExcel(allData);
+    }, function(){
+      loaded++;
+      if(loaded===2) generateBackupExcel(allData);
+    });
+  });
+}
+
+function setBackupMsg(msg, color){
+  var el = document.getElementById("backup-msg");
+  if(el) el.innerHTML = '<span style="color:'+color+'">'+msg+'</span>';
+}
+
+function generateBackupExcel(allData){
+  setBackupMsg("⏳ Excel oluşturuluyor...","#f59e0b");
+  try{
+    var XLSXlib = window.XLSX;
+    if(!XLSXlib){ setBackupMsg("❌ Excel kütüphanesi yüklenmedi.","#ef4444"); _backupPending=false; return; }
+
+    var wb = XLSXlib.utils.book_new();
+    var subjNames = ["Matematik","Türkçe","Fen Bilgisi","Sosyal Bilgiler","İngilizce","Din Kültürü","Genel Deneme"];
+    var subjIds   = ["matematik","turkce","fen","sosyal","ingilizce","din","deneme"];
+    var now = new Date();
+    var dateStr = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
+
+    // ── Özet sayfası ──
+    var sumRows = [
+      ["LGS Hazırlık Soru Takip — Yedekleme"],
+      ["Tarih: "+dateStr],
+      [""],
+      ["Öğrenci","Toplam Soru","Doğru","Yanlış","Net","Aktif Gün"]
+    ];
+    ["omer","zeynep"].forEach(function(sid){
+      var r=allData[sid]; var t=0,corr=0;
+      var activeDays=Object.keys(r).filter(function(d){
+        var dt=0; subjIds.forEach(function(s){dt+=(r[d][s]&&r[d][s].total)||0;}); return dt>0;
+      }).length;
+      Object.keys(r).forEach(function(d){
+        subjIds.forEach(function(s){ t+=(r[d][s]&&r[d][s].total)||0; corr+=(r[d][s]&&r[d][s].correct)||0; });
+      });
+      var w=t-corr; var net=Math.round((corr-w/4)*100)/100;
+      sumRows.push([STUDENTS[sid].name, t, corr, w, net, activeDays]);
+    });
+    var ws0 = XLSXlib.utils.aoa_to_sheet(sumRows);
+    ws0["!cols"] = [{wch:26},{wch:14},{wch:10},{wch:10},{wch:10},{wch:12}];
+    XLSXlib.utils.book_append_sheet(wb, ws0, "Özet");
+
+    // ── Her öğrenci için ayrı sayfa ──
+    ["omer","zeynep"].forEach(function(sid){
+      var r = allData[sid];
+      // Row 1: subject group headers (merged pairs)
+      var hdr1 = [""];
+      subjNames.forEach(function(n){ hdr1.push(n,""); });
+      // Row 2: column headers
+      var hdr2 = ["Tarih"];
+      subjIds.forEach(function(){ hdr2.push("Toplam","Doğru"); });
+      var rows = [hdr1, hdr2];
+      // Data rows sorted by date
+      Object.keys(r).sort().forEach(function(d){
+        var row = [d]; var hasAny=false;
+        subjIds.forEach(function(s){
+          var t=(r[d][s]&&r[d][s].total)||0;
+          var co=(r[d][s]&&r[d][s].correct)||0;
+          row.push(t||"", co||"");
+          if(t>0) hasAny=true;
+        });
+        if(hasAny) rows.push(row);
+      });
+      var ws = XLSXlib.utils.aoa_to_sheet(rows);
+      ws["!cols"] = [{wch:13}];
+      for(var i=0;i<14;i++) ws["!cols"].push({wch:9});
+      XLSXlib.utils.book_append_sheet(wb, ws, STUDENTS[sid].short);
+    });
+
+    XLSXlib.writeFile(wb, "LGS_Yedek_"+dateStr+".xlsx");
+    setBackupMsg("✅ Yedek indirildi: LGS_Yedek_"+dateStr+".xlsx","#22c55e");
+    setTimeout(function(){ setBackupMsg("","#000"); }, 5000);
+    _backupPending = false;
+  } catch(e){
+    setBackupMsg("❌ Hata: "+e.message,"#ef4444");
+    _backupPending = false;
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════
 //  PROFİL RESMİ (Firebase Realtime DB'de base64 saklanır)
