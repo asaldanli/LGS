@@ -2263,20 +2263,25 @@ function closeAvatarModal(){
 
 function previewAvatar(input){
   var file=input.files[0]; if(!file) return;
-  // Resize to max 200px to keep Firebase storage small
   var reader=new FileReader();
   reader.onload=function(e){
     var img=new Image();
     img.onload=function(){
+      var sz=200; // output square size
       var canvas=document.createElement("canvas");
-      var maxSz=200;
-      var ratio=Math.min(maxSz/img.width,maxSz/img.height,1);
-      canvas.width=img.width*ratio; canvas.height=img.height*ratio;
-      canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
-      _avatarPendingData=canvas.toDataURL("image/jpeg",0.82);
+      canvas.width=sz; canvas.height=sz;
+      var ctx=canvas.getContext("2d");
+      // Center-crop: take the largest centered square from the source
+      var srcSize=Math.min(img.width,img.height);
+      var sx=(img.width-srcSize)/2;
+      var sy=(img.height-srcSize)/2;
+      ctx.drawImage(img, sx, sy, srcSize, srcSize, 0, 0, sz, sz);
+      _avatarPendingData=canvas.toDataURL("image/jpeg",0.85);
       var prev=document.getElementById("avatar-preview");
       prev.style.backgroundImage="url('"+_avatarPendingData+"')";
-      prev.style.backgroundSize="cover"; prev.textContent="";
+      prev.style.backgroundSize="cover";
+      prev.style.backgroundPosition="center";
+      prev.textContent="";
     };
     img.src=e.target.result;
   };
