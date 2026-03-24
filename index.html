@@ -1,0 +1,2440 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>📚 LGS Hazırlık Soru Takip</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Nunito','Segoe UI',sans-serif;background:#F4F5FB;min-height:100vh}
+input[type=number]{-webkit-appearance:none;-moz-appearance:textfield}
+button{cursor:pointer;font-family:'Nunito','Segoe UI',sans-serif}
+:root{--p:#4F46E5;--v:#7C3AED;--g:#22c55e;--r:#ef4444;--a:#f59e0b}
+
+/* ── Student picker ─────────────────────────────── */
+#picker{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;background:linear-gradient(135deg,#4F46E5 0%,#7C3AED 100%)}
+.pick-card{background:white;border-radius:28px;padding:36px 32px;max-width:420px;width:100%;box-shadow:0 20px 60px #0003;text-align:center}
+.pick-card h1{font-size:26px;font-weight:900;color:#222;margin-bottom:6px}
+.pick-card p{font-size:13px;color:#999;font-weight:600;margin-bottom:30px}
+.student-btn{width:100%;padding:18px 20px;border-radius:18px;border:3px solid #e5e7eb;background:white;margin-bottom:12px;display:flex;align-items:center;gap:16px;transition:all .2s;cursor:pointer}
+.student-btn:hover{border-color:var(--p);background:#F8F8FF;transform:translateY(-2px);box-shadow:0 8px 24px #4F46E522}
+.student-avatar{width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
+.student-info{text-align:left}
+.student-info b{display:block;font-size:15px;font-weight:900;color:#222}
+.student-info span{font-size:12px;color:#aaa;font-weight:600}
+
+/* ── App ────────────────────────────────────────── */
+#app{display:none;padding-bottom:60px}
+.hdr{padding:18px 20px 26px;color:white}
+.hdr-inner{max-width:720px;margin:0 auto;display:flex;justify-content:space-between;align-items:flex-end}
+.sync-pill{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.18);border-radius:20px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer}
+.sync-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.wrap{max-width:720px;margin:-12px auto 0;padding:0 14px}
+
+/* Nav */
+.nav{display:flex;gap:5px;margin-bottom:14px;background:white;border-radius:16px;padding:5px;box-shadow:0 4px 20px #0001}
+.nav button{flex:1;padding:7px 2px;border-radius:12px;border:none;font-weight:800;font-size:11px;transition:all .2s;color:#999;background:transparent}
+.nav button.act{background:linear-gradient(135deg,var(--p),var(--v));color:white}
+
+/* Month/week nav */
+.period-nav{display:flex;align-items:center;justify-content:space-between;background:white;border-radius:14px;padding:10px 16px;margin-bottom:10px;box-shadow:0 2px 8px #0001}
+.period-nav button{background:none;border:none;font-size:22px;color:var(--p);line-height:1;padding:0 4px}
+.period-nav span{font-weight:900;font-size:15px;color:#222;text-align:center}
+
+/* Calendar */
+.cal{background:white;border-radius:16px;padding:12px 10px;margin-bottom:12px;box-shadow:0 2px 8px #0001}
+.cal-hdr{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:6px}
+.cal-hdr div{text-align:center;font-size:10px;font-weight:800;color:#bbb}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cday{border-radius:9px;border:none;padding:5px 1px;font-weight:600;font-size:13px;position:relative;text-align:center;background:transparent;color:#333;transition:all .15s;width:100%}
+.cday.sel{background:linear-gradient(135deg,var(--p),var(--v));color:white;font-weight:900}
+.cday.tdy{background:#EEF2FF;color:var(--p);font-weight:900}
+.cday.off{color:#d1d5db;cursor:default}
+.cday.dot::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--p)}
+.cday.sel.dot::after{background:rgba(255,255,255,.8)}
+
+/* Weekly grid */
+.week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:12px}
+.wday-card{background:white;border-radius:14px;padding:10px 6px;text-align:center;box-shadow:0 2px 8px #0001;cursor:pointer;transition:all .2s;border:2px solid transparent}
+.wday-card:hover{border-color:#4F46E544}
+.wday-card.sel{border-color:var(--p);background:#F0F0FF}
+.wday-card.today-wk{background:#EEF2FF}
+.wday-card.off{opacity:.4;cursor:default}
+
+/* Subject cards */
+.scard{background:white;border-radius:18px;overflow:hidden;box-shadow:0 2px 8px #0001;margin-bottom:10px;border:2px solid transparent;transition:border .2s}
+.scard.has{box-shadow:0 4px 16px #0002}
+.shead{padding:13px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;user-select:none}
+.sicon{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0}
+.sbody{padding:16px;border-top:2px solid #f3f4f6}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.fbox{border-radius:14px;padding:12px;text-align:center}
+.flbl{font-size:11px;font-weight:800;letter-spacing:.5px;margin-bottom:8px}
+.stpr{display:flex;align-items:center;gap:4px;justify-content:center}
+.stpr button{width:28px;height:28px;border-radius:8px;border:none;font-size:15px;font-weight:900}
+.stpr input{width:56px;text-align:center;border-radius:10px;border:2px solid;font-size:17px;font-weight:900;padding:5px 0;outline:none;font-family:'Nunito',sans-serif}
+.wbox{background:#fff5f5;border-radius:12px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.wval{font-size:28px;font-weight:900;color:var(--r)}
+.bar{background:#e5e7eb;border-radius:8px;height:10px;display:flex;overflow:hidden;margin-bottom:6px}
+.bg{background:var(--g);height:100%;transition:width .4s}
+.br{background:var(--r);height:100%;transition:width .4s}
+
+/* Stats */
+.sgrid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+.sgrid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.sgrid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+.sbox{border-radius:14px;padding:13px 8px;text-align:center}
+.sval{font-size:20px;font-weight:900}
+.slbl{font-size:10px;font-weight:700;margin-top:2px}
+.card{background:white;border-radius:18px;padding:16px;box-shadow:0 2px 8px #0001;margin-bottom:12px}
+.card-ttl{font-weight:900;font-size:16px;color:#222;margin-bottom:16px}
+.tag{font-size:11px;font-weight:800;padding:2px 7px;border-radius:8px;display:inline-block}
+.pbr{background:#f3f4f6;border-radius:8px;height:9px;overflow:hidden;position:relative}
+.pfill{height:100%;border-radius:8px;transition:width .6s}
+.pmark{position:absolute;top:0;width:2px;height:100%;background:#374151}
+.tip{background:#EEF2FF;border-radius:12px;padding:10px 14px;font-size:12px;color:var(--p);font-weight:700;margin-bottom:14px}
+.empty{text-align:center;padding:40px;color:#ccc}
+.btn-pdf{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:12px;border:none;background:linear-gradient(135deg,#DC2626,#991B1B);color:white;font-size:13px;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif}
+.btn-sw{padding:6px 12px;border-radius:10px;border:2px solid #e5e7eb;background:white;font-size:12px;font-weight:800;color:#666;cursor:pointer;font-family:'Nunito',sans-serif;transition:all .2s}
+.btn-sw:hover{border-color:var(--p);color:var(--p)}
+.chart-tab{padding:5px 10px;border-radius:8px;border:2px solid #e5e7eb;background:white;font-size:11px;font-weight:800;color:#999;cursor:pointer;font-family:Nunito,sans-serif;transition:all .2s}
+.chart-tab.act{background:linear-gradient(135deg,var(--p),var(--v));color:white;border-color:transparent}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- ═══ STUDENT PICKER ═══ -->
+<div id="picker">
+  <div class="pick-card">
+    <div style="font-size:48px;margin-bottom:16px">📚</div>
+    <h1>LGS Hazırlık Soru Takip</h1>
+    <p id="pick-sub">Hangi öğrencinin takibini yapıyorsunuz?</p>
+    <div id="readonly-badge" style="display:none;background:#FEF3C7;border:2px solid #F59E0B;border-radius:12px;padding:8px 14px;margin-bottom:14px;font-size:12px;font-weight:800;color:#92400E">👁️ Görüntüleme Modu — Veri girişi kapalı</div>
+    <button class="student-btn" onclick="askPassword('omer')">
+      <div class="student-avatar" id="pick-avatar-omer" style="background:#EEF2FF;overflow:hidden">👦</div>
+      <div class="student-info"><b>Ömer Doruk Saldanlı</b><span>Öğrenci</span></div>
+    </button>
+    <button class="student-btn" onclick="askPassword('zeynep')">
+      <div class="student-avatar" id="pick-avatar-zeynep" style="background:#FDF2F8;overflow:hidden">👧</div>
+      <div class="student-info"><b>Zeynep Alya Saldanlı</b><span>Öğrenci</span></div>
+    </button>
+    <button class="student-btn" onclick="askPassword('teacher')" style="border-color:#0891b222;background:#F0F9FF">
+      <div class="student-avatar" style="background:#E0F2FE">👩‍🏫</div>
+      <div class="student-info"><b>Öğretmen Girişi</b><span>Şifresiz — öğrenci seçerek gir</span></div>
+    </button>
+    <button class="student-btn" onclick="askPassword('admin')" style="border-color:#f59e0b22;background:#FFFBF0">
+      <div class="student-avatar" style="background:#FEF3C7">👑</div>
+      <div class="student-info"><b>Arif Saldanlı</b><span>Yönetici</span></div>
+    </button>
+      <div id="upload-section" style="margin-top:8px;border-top:1px solid #f3f4f6;padding-top:16px">
+      <div style="font-size:12px;color:#aaa;font-weight:700;margin-bottom:10px;text-align:center">Geçmiş verileri yükle</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="dlTemplate()" style="flex:1;padding:11px;border-radius:14px;border:2px solid #22c55e;background:white;color:#16a34a;font-size:12px;font-weight:800;font-family:Nunito,sans-serif">
+          📥 Şablon İndir
+        </button>
+        <label style="flex:1;padding:11px;border-radius:14px;border:2px solid #4F46E5;background:white;color:#4F46E5;font-size:12px;font-weight:800;cursor:pointer;text-align:center;display:flex;align-items:center;justify-content:center;gap:6px">
+          📤 Excel Yükle
+          <input type="file" accept=".xlsx,.xls" style="display:none" onchange="uploadExcel(this)"/>
+        </label>
+      </div>
+      <div id="upload-msg" style="font-size:12px;font-weight:700;text-align:center;margin-top:8px;min-height:18px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div id="app">
+  <div class="hdr" id="hdr-bg">
+    <div class="hdr-inner">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div id="hdr-avatar" style="width:46px;height:46px;border-radius:14px;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;overflow:hidden;cursor:pointer" onclick="openAvatarModal()" title="Profil resmini değiştir"></div>
+        <div>
+          <div style="font-size:11px;opacity:.7;font-weight:700;letter-spacing:1.5px;margin-bottom:2px" id="hdr-sub">—</div>
+          <div style="font-size:20px;font-weight:900" id="hdr-name">—</div>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-bottom:4px">
+          <div id="ro-pill" style="display:none;background:rgba(245,158,11,0.25);border-radius:20px;padding:4px 10px;font-size:10px;font-weight:800;color:#FDE68A">👁️ Salt Okunur</div>
+          <div class="sync-pill" id="sync-pill">
+            <div class="sync-dot" id="sync-dot" style="background:#86EFAC"></div>
+            <span id="sync-txt">Bağlanıyor...</span>
+          </div>
+          <button class="sync-pill" onclick="showPicker()" style="border:none">🔄 Değiştir</button>
+        </div>
+        <div>
+          <span style="font-size:24px;font-weight:900" id="hdr-total">0</span>
+          <span style="font-size:11px;opacity:.7;margin-left:2px">soru</span>
+          <span style="font-size:12px;opacity:.85;margin-left:8px">
+            <span style="color:#86EFAC">✓<span id="hdr-c">0</span></span>
+            · <span style="color:#FCA5A5">✗<span id="hdr-w">0</span></span>
+            · <span style="color:#FDE68A">Net:<span id="hdr-n">0</span></span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <nav class="nav">
+      <button id="nb-daily"   onclick="gv('daily')"   class="act">📅 Günlük</button>
+      <button id="nb-weekly"  onclick="gv('weekly')">📆 Haftalık</button>
+      <button id="nb-monthly" onclick="gv('monthly')">📊 Aylık</button>
+      <button id="nb-goals"   onclick="gv('goals')">🎯 Hedefler</button>
+      <button id="nb-stats"   onclick="gv('stats')">🏆 İstatistik</button>
+      <!-- Admin tabs — hidden by default, shown on admin login -->
+      <button id="nb-cmp-daily"   onclick="gv('cmp-daily')"   style="display:none">📅 Günlük</button>
+      <button id="nb-cmp-weekly"  onclick="gv('cmp-weekly')"  style="display:none">📆 Haftalık</button>
+      <button id="nb-cmp-monthly" onclick="gv('cmp-monthly')" style="display:none">📊 Aylık</button>
+      <button id="nb-cmp-all"     onclick="gv('cmp-all')"     style="display:none">🏆 Genel</button>
+      <button id="nb-cmp-subj"    onclick="gv('cmp-subj')"    style="display:none">📚 Dersler</button>
+    </nav>
+    <div id="vw"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════════════════════
+var FB_CFG = {
+  apiKey:"AIzaSyC48zpV-bhFVoP6cNx9IGunljVk7_xyHAw",
+  authDomain:"soru-takip-uygulamasi.firebaseapp.com",
+  databaseURL:"https://soru-takip-uygulamasi-default-rtdb.firebaseio.com",
+  projectId:"soru-takip-uygulamasi",
+  storageBucket:"soru-takip-uygulamasi.firebasestorage.app",
+  messagingSenderId:"716938527262",
+  appId:"1:716938527262:web:2e252a594e0e3df8f0640f"
+};
+
+var STUDENTS = {
+  omer:   {name:"Ömer Doruk Saldanlı",   short:"Ömer Doruk",  emoji:"👦", grad:"linear-gradient(135deg,#4F46E5,#7C3AED)"},
+  zeynep: {name:"Zeynep Alya Saldanlı",  short:"Zeynep Alya", emoji:"👧", grad:"linear-gradient(135deg,#DB2777,#9D174D)"},
+  admin:  {name:"Arif Saldanlı",         short:"Yönetici",    emoji:"👑", grad:"linear-gradient(135deg,#d97706,#b45309)"},
+  teacher:{name:"Öğretmen",              short:"Öğretmen",    emoji:"👩‍🏫", grad:"linear-gradient(135deg,#0891b2,#0e7490)"}
+};
+// ── ŞİFRELER — teacher şifresiz (boş string) ──
+var PASSWORDS = {
+  omer:    "031212",
+  zeynep:  "180915",
+  admin:   "301185",
+  teacher: ""
+};
+// Profil resimleri (Firebase'den yüklenir)
+var PROFILE_PICS = { omer: null, zeynep: null };
+
+var SUBJ = [
+  {id:"matematik", n:"Matematik",      e:"📐",c:"#FF6B6B",bg:"#FFF0F0",li:"#FFE0E0"},
+  {id:"turkce",    n:"Türkçe",          e:"📖",c:"#4ECDC4",bg:"#F0FFFE",li:"#D0F5F3"},
+  {id:"fen",       n:"Fen Bilgisi",     e:"🔬",c:"#45B7D1",bg:"#F0F8FF",li:"#D0EEFF"},
+  {id:"sosyal",    n:"Sosyal Bilgiler", e:"🌍",c:"#56C596",bg:"#F0FFF8",li:"#C8F0E0"},
+  {id:"ingilizce", n:"İngilizce",       e:"🌎",c:"#F4A261",bg:"#FFF8F0",li:"#FDE8CC"},
+  {id:"din",       n:"Din Kültürü",     e:"⭐",c:"#9B72CF",bg:"#F8F0FF",li:"#E8D5FF"},
+  {id:"deneme",    n:"Genel Deneme",    e:"📝",c:"#E84393",bg:"#FFF0F8",li:"#FFD0EB"}
+];
+var MONTHS = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+var DAYS_SHORT = ["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"];
+var DAYS_LONG  = ["Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi","Pazar"];
+var START = "2026-01-01";
+var NET_DIVISOR = 4; // 4 yanlış = 1 doğru
+var READONLY = (new URLSearchParams(window.location.search)).has("izle");
+function injectReadonlyCSS(){
+  if(document.getElementById("ro-style")) return; // already injected
+  var s=document.createElement("style");
+  s.id="ro-style";
+  s.textContent='.stpr button,.stpr input,.goal-save,.btn-sw{pointer-events:none!important;opacity:0.4!important}.stpr input{background:#f9f9f9!important}';
+  document.head.appendChild(s);
+}
+if(READONLY){
+  document.addEventListener("DOMContentLoaded",function(){ injectReadonlyCSS(); });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════════
+var db, curStudent = null;
+var recs = {}, goals = {};
+var recRef, goalRef, recListener, goalListener;
+var selDate, selMonth, selWeekStart;
+var curView = "daily", expSubj = null;
+var saveTimers = {};
+
+// ═══════════════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════════════
+function today(){ return new Date().toISOString().split("T")[0]; }
+function pad(n){ return String(n).padStart(2,"0"); }
+function ymNow(){ var d=new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1); }
+function ym(y,m){ return y+"-"+pad(m+1); }
+function dim(y,m){ return new Date(y,m+1,0).getDate(); }
+function ds(y,m,d){ return y+"-"+pad(m+1)+"-"+pad(d); }
+function fmtD(s){ var p=s.split("-"); return p[2]+"/"+p[1]+"/"+p[0]; }
+function parseYM(s){ return {y:parseInt(s),m:parseInt(s.slice(5))-1}; }
+function cw(t,c){ return Math.max(0,(t||0)-(c||0)); }
+function calcNet(c,w){ return c - w/NET_DIVISOR; }
+function fnet(n){ return Number.isInteger(n*4)?n:(Math.round(n*100)/100); }
+
+function availMonths(){
+  var res=[],y=2026,m=0,now=new Date();
+  while(y<now.getFullYear()||(y===now.getFullYear()&&m<=now.getMonth())){
+    res.push(ym(y,m)); if(++m>11){m=0;y++;}
+  }
+  return res;
+}
+
+// Get Monday of the week containing date string d
+function weekStart(d){
+  var dt=new Date(d);
+  var day=dt.getDay(); // 0=Sun
+  var diff=day===0?-6:1-day; // Monday
+  dt.setDate(dt.getDate()+diff);
+  return dt.toISOString().split("T")[0];
+}
+function addDays(d,n){
+  var dt=new Date(d); dt.setDate(dt.getDate()+n);
+  return dt.toISOString().split("T")[0];
+}
+function weekDays(ws){ var r=[]; for(var i=0;i<7;i++) r.push(addDays(ws,i)); return r; }
+
+function dstats(d){
+  var r=recs[d]||{},t=0,c=0,w=0;
+  SUBJ.forEach(function(s){
+    var sr=r[s.id]||{}; t+=sr.total||0; c+=sr.correct||0; w+=cw(sr.total||0,sr.correct||0);
+  });
+  return {total:t,correct:c,wrong:w,net:calcNet(c,w)};
+}
+
+function mstats(ymStr,sid){
+  var p=parseYM(ymStr),days=dim(p.y,p.m),t=0,c=0,w=0;
+  for(var d=1;d<=days;d++){
+    var key=ds(p.y,p.m,d),r=recs[key];
+    if(!r)continue;
+    var list=sid?[SUBJ.find(function(s){return s.id===sid;})]:SUBJ;
+    list.forEach(function(s){
+      if(!s)return; var sr=r[s.id]||{};
+      t+=sr.total||0; c+=sr.correct||0; w+=cw(sr.total||0,sr.correct||0);
+    });
+  }
+  return {total:t,correct:c,wrong:w,net:calcNet(c,w)};
+}
+
+function wstats(ws,sid){
+  var days=weekDays(ws),t=0,c=0,w=0;
+  days.forEach(function(d){
+    var r=recs[d]||{};
+    var list=sid?[SUBJ.find(function(s){return s.id===sid;})]:SUBJ;
+    list.forEach(function(s){
+      if(!s)return; var sr=r[s.id]||{};
+      t+=sr.total||0; c+=sr.correct||0; w+=cw(sr.total||0,sr.correct||0);
+    });
+  });
+  return {total:t,correct:c,wrong:w,net:calcNet(c,w)};
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  FIREBASE + STUDENT SELECT
+// ═══════════════════════════════════════════════════════════════════
+window.addEventListener("DOMContentLoaded", function(){
+  try{
+    var app; try{app=firebase.app();}catch(e){app=firebase.initializeApp(FB_CFG);}
+    db = firebase.database(app);
+    db.ref(".info/connected").on("value",function(s){ syncState(s.val()?"ok":"saving"); });
+    // Show picker
+    document.getElementById("picker").style.display="flex";
+    document.getElementById("app").style.display="none";
+    // Pre-load profile pics for picker display
+    if(db) loadProfilePicsForPicker();
+    if(READONLY){
+      document.getElementById("readonly-badge").style.display="block";
+      document.getElementById("pick-sub").textContent="Hangi öğrenciyi görüntülemek istiyorsunuz?";
+      var us=document.getElementById("upload-section"); if(us)us.style.display="none";
+    }
+  }catch(e){ console.error(e); }
+});
+
+function showPicker(){
+  // Detach old listeners
+  if(recRef&&recListener) recRef.off("value",recListener);
+  if(goalRef&&goalListener) goalRef.off("value",goalListener);
+  recs={}; goals={};
+  document.getElementById("app").style.display="none";
+  document.getElementById("picker").style.display="flex";
+}
+
+function pickStudent(sid){
+  try{
+    if(!db){
+      try{var a2;try{a2=firebase.app();}catch(e){a2=firebase.initializeApp(FB_CFG);}db=firebase.database(a2);}
+      catch(e2){alert("Firebase baglantisi kurulamadi: "+e2.message);return;}
+    }
+    if(recRef&&recListener)recRef.off("value",recListener);
+    if(goalRef&&goalListener)goalRef.off("value",goalListener);
+    recs={}; goals={};
+    selDate=today(); selMonth=ymNow(); selWeekStart=weekStart(today());
+    expSubj=null;
+    document.getElementById("picker").style.display="none";
+    document.getElementById("app").style.display="block";
+
+    // ── Admin mode ──
+    if(sid==="admin"){
+      curStudent="omer";
+      document.getElementById("hdr-bg").style.background="linear-gradient(135deg,#d97706,#b45309)";
+      document.getElementById("hdr-sub").textContent="👑";
+      document.getElementById("hdr-name").textContent="Yönetici Paneli";
+      document.getElementById("ro-pill").style.display="inline-flex";
+      ["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj"].forEach(function(t){
+        var el=document.getElementById("nb-"+t); if(el) el.style.display="flex";
+      });
+      ["daily","weekly","monthly","goals","stats"].forEach(function(t){
+        var el=document.getElementById("nb-"+t); if(el) el.style.display="none";
+      });
+      recRef=db.ref("records/omer");
+      goalRef=db.ref("goals/omer");
+      syncState("saving");
+      recListener=recRef.on("value",function(snap){
+        recs=snap.val()||{};
+        db.ref("records/zeynep").once("value",function(s2){
+          cmpRecs=s2.val()||{}; updateHdr(); syncState("ok");
+          gv("cmp-daily");
+        });
+      },function(){ syncState("error"); });
+      goalListener=goalRef.on("value",function(snap){ goals=snap.val()||{}; });
+      return;
+    }
+
+    // ── Normal student ──
+    curStudent=sid;
+    var st=STUDENTS[sid];
+    document.getElementById("hdr-bg").style.background=st.grad;
+    document.getElementById("hdr-sub").textContent=st.emoji;
+    document.getElementById("hdr-name").textContent=st.name;
+    // Header avatar
+    var hdrAv=document.getElementById("hdr-avatar");
+    if(hdrAv){ hdrAv.style.backgroundImage="none"; hdrAv.textContent=st.emoji; }
+    if(READONLY||_teacherMode){
+      document.getElementById("ro-pill").style.display="inline-flex";
+      if(_teacherMode){
+        document.getElementById("ro-pill").textContent="👩‍🏫 Öğretmen Modu";
+        injectReadonlyCSS();
+      }
+      var cmpBtn2=document.getElementById("nb-cmp"); if(cmpBtn2) cmpBtn2.style.display="flex";
+      loadComparison(function(){ if(curView==="cmp") renderComparison(); });
+    }
+    // Hide change-picture if teacher or readonly
+    var hdrAvEl=document.getElementById("hdr-avatar");
+    if(hdrAvEl){ hdrAvEl.style.cursor=(READONLY||_teacherMode)?"default":"pointer"; hdrAvEl.onclick=(READONLY||_teacherMode)?null:openAvatarModal; }
+    curView="daily";
+    recRef=db.ref("records/"+sid);
+    goalRef=db.ref("goals/"+sid);
+    syncState("saving");
+    recListener=recRef.on("value",function(snap){
+      recs=snap.val()||{}; updateHdr(); render(); syncState("ok");
+    },function(){ syncState("error"); });
+    goalListener=goalRef.on("value",function(snap){
+      goals=snap.val()||{}; render();
+    });
+    loadProfilePics();
+    gv("daily");
+  }catch(e){alert("Giris hatasi: "+e.message); console.error(e);}
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SYNC UI
+// ═══════════════════════════════════════════════════════════════════
+function syncState(s){
+  var dot=document.getElementById("sync-dot"),txt=document.getElementById("sync-txt");
+  if(!dot)return;
+  if(s==="saving"){dot.style.background="#FDE68A";txt.textContent="Bağlanıyor...";}
+  else if(s==="ok"){dot.style.background="#86EFAC";txt.textContent="Senkronize ✓";}
+  else{dot.style.background="#FCA5A5";txt.textContent="Bağlantı hatası!";}
+}
+
+function saveField(sid,field,val){
+  if(!curStudent||READONLY)return;
+  val=Math.max(0,parseInt(val)||0);
+  var cur=(recs[selDate]&&recs[selDate][sid])||{total:0,correct:0};
+  var t=cur.total||0,c=cur.correct||0;
+  if(field==="total"){t=val;if(c>t)c=t;}
+  else{c=val;if(c>t)t=c;}
+  if(!recs[selDate])recs[selDate]={};
+  recs[selDate][sid]={total:t,correct:c};
+  updateHdr();
+  var wEl=document.getElementById("wv-"+sid);
+  if(wEl)wEl.textContent=cw(t,c);
+  var nEl=document.getElementById("nv-"+sid);
+  if(nEl)nEl.textContent="Net: "+fnet(calcNet(c,cw(t,c)));
+  clearTimeout(saveTimers[sid]); syncState("saving");
+  saveTimers[sid]=setTimeout(function(){
+    recRef.child(selDate).child(sid).set({total:t,correct:c})
+      .then(function(){syncState("ok");}).catch(function(){syncState("error");});
+  },700);
+}
+
+function adj(sid,field,delta){
+  var inp=document.getElementById("inp-"+sid+"-"+field);
+  if(!inp)return;
+  inp.value=Math.max(0,(parseInt(inp.value)||0)+delta);
+  saveField(sid,field,inp.value);
+}
+
+function saveGoals(){
+  if(READONLY){alert("Görüntüleme modunda kayıt yapılamaz.");return;}
+  syncState("saving");
+  goalRef.child(selMonth).set(goals[selMonth]||{})
+    .then(function(){syncState("ok");showGoalOk();}).catch(function(){syncState("error");});
+}
+function showGoalOk(){
+  var btn=document.getElementById("goal-btn");
+  if(!btn)return;
+  btn.textContent="✅ Kaydedildi!";
+  btn.style.background="linear-gradient(135deg,#22c55e,#16a34a)";
+  setTimeout(function(){btn.textContent="🎯 Hedefleri Kaydet";btn.style.background="linear-gradient(135deg,var(--p),var(--v))";},2000);
+}
+function setGoalField(sid,field,val){
+  if(!goals[selMonth])goals[selMonth]={};
+  if(sid==="__acc"){
+    goals[selMonth]["__acc"]=Math.min(100,Math.max(0,parseInt(val)||0));
+    return;
+  }
+  val=Math.max(0,parseInt(val)||0);
+  if(!goals[selMonth][sid])goals[selMonth][sid]={targetTotal:0};
+  goals[selMonth][sid][field]=val;
+}
+function adjGoal(sid,field,delta){
+  if(sid==="__acc"){
+    var cur=(goals[selMonth]&&goals[selMonth]["__acc"])||0;
+    setGoalField("__acc","",Math.min(100,Math.max(0,cur+delta)));
+    renderGoals(); return;
+  }
+  var g=(goals[selMonth]&&goals[selMonth][sid])||{targetTotal:0};
+  var v=Math.max(0,(g[field]||0)+delta);
+  setGoalField(sid,field,v); renderGoals();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════════════════════
+function gv(v){
+  if(READONLY&&v==="goals") return;
+  curView=v; expSubj=null;
+  ["daily","weekly","monthly","goals","stats","cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj"].forEach(function(x){
+    var el=document.getElementById("nb-"+x); if(el) el.className=x===v?"act":"";
+  });
+  render();
+}
+function render(){ if(!db||!curStudent)return; var fn={daily:renderDaily,weekly:renderWeekly,monthly:renderMonthly,goals:renderGoals,stats:renderStats,"cmp-daily":renderCmpDaily,"cmp-weekly":renderCmpWeekly,"cmp-monthly":renderCmpMonthly,"cmp-all":renderCmpAll,"cmp-subj":renderCmpSubj}; (fn[curView]||renderDaily)(); updateHdr(); }
+
+function updateHdr(){
+  var s=dstats(selDate);
+  document.getElementById("hdr-total").textContent=s.total;
+  document.getElementById("hdr-c").textContent=s.correct;
+  document.getElementById("hdr-w").textContent=s.wrong;
+  document.getElementById("hdr-n").textContent=fnet(s.net);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  DAILY VIEW
+// ═══════════════════════════════════════════════════════════════════
+function renderDaily(){
+  var p=parseYM(selDate.slice(0,7)),calDays=dim(p.y,p.m);
+  var fdow=new Date(p.y,p.m,1).getDay(),td=today();
+  var cells="";
+  for(var i=0;i<fdow;i++)cells+="<div></div>";
+  for(var d=1;d<=calDays;d++){
+    var dstr=ds(p.y,p.m,d),st=dstats(dstr);
+    var cls="cday";
+    if(dstr===selDate)cls+=" sel"; else if(dstr===td)cls+=" tdy";
+    if(dstr>td||dstr<START)cls+=" off";
+    if(st.total>0)cls+=" dot";
+    var dis=dstr>td||dstr<START;
+    cells+='<button class="'+cls+'"'+(dis?'':' onclick="selD(\''+dstr+'\')"')+'>'+d+'</button>';
+  }
+  var tod=dstats(selDate);
+  var scards="";
+  SUBJ.forEach(function(s){
+    var r=(recs[selDate]&&recs[selDate][s.id])||{};
+    var t=r.total||0,c=r.correct||0,w=cw(t,c);
+    var has=t>0,exp=expSubj===s.id,pct=t>0?parseFloat((c/t*100).toFixed(2)):0,n=calcNet(c,w);
+    var body="";
+    if(exp){
+      var cpct=t>0?parseFloat((c/t*100).toFixed(2)):0,wpct=t>0?parseFloat((w/t*100).toFixed(2)):0;
+      body='<div class="sbody" style="background:'+s.bg+'">'
+        +'<div class="grid2">'
+        +'<div class="fbox" style="background:white;border:2px solid '+s.c+'22">'
+        +'<div class="flbl" style="color:#888">📋 TOPLAM SORU</div>'
+        +'<div class="stpr"><button style="background:#e5e7eb;color:#666" onclick="adj(\''+s.id+'\',\'total\',-1)">−</button>'
+        +'<input id="inp-'+s.id+'-total" type="number" min="0" value="'+t+'" style="border-color:'+s.c+';color:'+s.c+'" oninput="saveField(\''+s.id+'\',\'total\',this.value)">'
+        +'<button style="background:'+s.c+';color:white" onclick="adj(\''+s.id+'\',\'total\',1)">+</button></div></div>'
+        +'<div class="fbox" style="background:#f0fdf4;border:2px solid #22c55e22">'
+        +'<div class="flbl" style="color:#22c55e">✓ DOĞRU</div>'
+        +'<div class="stpr"><button style="background:#dcfce7;color:#22c55e" onclick="adj(\''+s.id+'\',\'correct\',-1)">−</button>'
+        +'<input id="inp-'+s.id+'-correct" type="number" min="0" value="'+c+'" style="border-color:#22c55e;color:#22c55e" oninput="saveField(\''+s.id+'\',\'correct\',this.value)">'
+        +'<button style="background:#22c55e;color:white" onclick="adj(\''+s.id+'\',\'correct\',1)">+</button></div></div></div>'
+        +'<div class="wbox"><div>'
+        +'<div style="font-size:10px;font-weight:800;color:#ef4444">✗ YANLIŞ (Otomatik)</div>'
+        +'<div style="font-size:10px;color:#aaa;font-weight:600">= Toplam − Doğru</div>'
+        +'</div><div class="wval" id="wv-'+s.id+'">'+w+'</div></div>'
+        +(t>0?'<div class="bar"><div class="bg" style="width:'+cpct+'%"></div><div class="br" style="width:'+wpct+'%"></div></div>'
+          +'<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-top:4px">'
+          +'<div style="display:flex;gap:10px"><span style="color:#22c55e">✓%'+cpct+'</span><span style="color:#ef4444">✗%'+wpct+'</span></div>'
+          +'<span id="nv-'+s.id+'" style="color:'+(n>=0?"#22c55e":"#ef4444")+'">Net: '+fnet(n)+'</span></div>':"")
+        +'<div style="background:#EEF2FF;border-radius:10px;padding:6px 10px;margin-top:10px;font-size:11px;color:#4F46E5;font-weight:700">ℹ️ Net = Doğru − Yanlış ÷ 4</div>'
+        +'</div>';
+    }
+    scards+='<div class="scard'+(has?" has":"")+'" style="border-color:'+(has?s.c+'55':"transparent")+'">'
+      +'<div class="shead" onclick="tog(\''+s.id+'\')">'
+      +'<div class="sicon" style="background:'+s.li+'">'+s.e+'</div>'
+      +'<div style="flex:1;min-width:0"><div style="font-weight:900;font-size:14px;color:#222">'+s.n+'</div>'
+      +(has?'<div style="display:flex;gap:8px;margin-top:3px;flex-wrap:wrap">'
+        +'<span style="font-size:11px;font-weight:700;color:#888">📋'+t+'</span>'
+        +'<span style="font-size:11px;font-weight:700;color:#22c55e">✓'+c+'</span>'
+        +'<span style="font-size:11px;font-weight:700;color:#ef4444">✗'+w+'</span>'
+        +'<span style="font-size:11px;font-weight:700;color:'+s.c+'">%'+pct+'</span></div>'
+       :'<div style="font-size:11px;color:#ccc;font-weight:600;margin-top:3px">Dokunarak veri gir</div>')
+      +'</div>'
+      +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'
+      +(has?'<span style="font-weight:900;font-size:12px;color:'+(n>=0?"#22c55e":"#ef4444")+'">Net:'+fnet(n)+'</span>':"")
+      +'<span style="font-size:18px;color:#ccc;line-height:1;transform:'+(exp?"rotate(180deg)":"none")+'">⌄</span>'
+      +'</div></div>'+body+'</div>';
+  });
+  document.getElementById("vw").innerHTML=
+    streakWidget()
+    +'<div class="period-nav">'
+    +'<button onclick="calPrev()">‹</button>'
+    +'<span>'+MONTHS[p.m]+' '+p.y+'</span>'
+    +'<button onclick="calNext()">›</button></div>'
+    +'<div class="cal"><div class="cal-hdr">'+DAYS_SHORT.map(function(d){return'<div>'+d+'</div>';}).join("")+'</div>'
+    +'<div class="cal-grid">'+cells+'</div></div>'
+    +'<div style="background:white;border-radius:12px;padding:9px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px #0001">'
+    +'<span style="font-size:13px;color:#888;font-weight:700">'+DAYS_SHORT[new Date(selDate).getDay()]+', '+fmtD(selDate)+(selDate===td?' <span style="color:var(--p)">● Bugün</span>':"")+'</span>'
+    +(tod.total>0?'<span style="font-weight:900;font-size:12px;color:'+(tod.net>=0?"#22c55e":"#ef4444")+'">Net: '+fnet(tod.net)+'</span>':"")
+    +'</div>'
+    +scards
+    +'<div style="text-align:center;font-size:11px;color:#aaa;font-weight:700;margin-top:8px">✅ Otomatik kaydediliyor · Net = Doğru − Yanlış÷4</div>';
+}
+
+function selD(d){if(d>today()||d<START)return;selDate=d;expSubj=null;renderDaily();updateHdr();}
+function tog(sid){expSubj=expSubj===sid?null:sid;renderDaily();}
+function calPrev(){
+  var p=parseYM(selDate.slice(0,7)),nm=p.m-1,ny=p.y;
+  if(nm<0){nm=11;ny--;}
+  if(ym(ny,nm)<START.slice(0,7))return;
+  selDate=ds(ny,nm,1);renderDaily();
+}
+function calNext(){
+  var p=parseYM(selDate.slice(0,7)),nm=p.m+1,ny=p.y;
+  if(nm>11){nm=0;ny++;}
+  var now=new Date();
+  if(ny>now.getFullYear()||(ny===now.getFullYear()&&nm>now.getMonth()))return;
+  selDate=ds(ny,nm,1);renderDaily();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  WEEKLY VIEW
+// ═══════════════════════════════════════════════════════════════════
+function renderWeekly(){
+  var days=weekDays(selWeekStart),td=today();
+  var ws=wstats(selWeekStart);
+  var weekLabel=fmtD(selWeekStart)+" – "+fmtD(days[6]);
+
+  // Day cards
+  var dayCards='<div class="week-grid">';
+  days.forEach(function(d,i){
+    var st=dstats(d);
+    var isOff=d>td||d<START;
+    var isSel=d===selDate;
+    var isTd=d===td;
+    dayCards+='<div class="wday-card'+(isSel?" sel":"")+(isTd&&!isSel?" today-wk":"")+(isOff?" off":"")+'"'
+      +(!isOff?' onclick="selD(\''+d+'\');gv(\'daily\')"':'')+'>'
+      +'<div style="font-size:10px;font-weight:800;color:#aaa;margin-bottom:4px">'+["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"][i]+'</div>'
+      +'<div style="font-size:16px;font-weight:900;color:#333">'+parseInt(d.split("-")[2])+'</div>'
+      +(st.total>0?'<div style="font-size:9px;font-weight:800;color:var(--p);margin-top:4px">'+st.total+'s</div>':'<div style="height:14px"></div>')
+      +(st.total>0?'<div style="font-size:9px;font-weight:700;color:'+(st.net>=0?"#22c55e":"#ef4444")+'">'+fnet(st.net)+'</div>':"")
+      +'</div>';
+  });
+  dayCards+='</div>';
+
+  // Weekly subject table
+  var table='<div class="card"><div class="card-ttl" style="margin-bottom:10px">Ders Detayları</div>';
+  SUBJ.forEach(function(s){
+    var t=0,c=0,w=0;
+    days.forEach(function(d){ var r=(recs[d]&&recs[d][s.id])||{}; t+=r.total||0; c+=r.correct||0; w+=cw(r.total||0,r.correct||0); });
+    if(!t)return;
+    var pct=parseFloat((c/t*100).toFixed(2)),n=calcNet(c,w);
+    table+='<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f3f4f6">'
+      +'<div style="width:34px;height:34px;border-radius:10px;background:'+s.li+';display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">'+s.e+'</div>'
+      +'<div style="flex:1"><div style="font-weight:800;font-size:13px;color:#222">'+s.n+'</div>'
+      +'<div class="bar" style="margin-top:4px;height:7px"><div class="bg" style="width:'+pct+'%"></div><div class="br" style="width:'+(100-pct)+'%"></div></div></div>'
+      +'<div style="text-align:right;min-width:70px">'
+      +'<div style="font-size:11px;font-weight:700;color:#888">'+t+' soru</div>'
+      +'<div style="font-size:12px;font-weight:900;color:'+(n>=0?"#22c55e":"#ef4444")+'">'+fnet(n)+' net</div>'
+      +'<div style="font-size:10px;font-weight:700;color:#aaa">✓'+c+' ✗'+w+'</div>'
+      +'</div></div>';
+  });
+  if(!ws.total) table+='<div class="empty" style="padding:20px"><div>Bu hafta veri yok</div></div>';
+  table+='</div>';
+
+  // Daily breakdown for the week
+  var dayDetail='<div class="card"><div class="card-ttl" style="margin-bottom:10px">Günlük Özet</div>';
+  days.forEach(function(d,i){
+    var st=dstats(d);
+    var isOff=d>td||d<START;
+    if(isOff&&!st.total)return;
+    dayDetail+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f3f4f6;cursor:'+(isOff?'default':'pointer')+'" '
+      +(!isOff?'onclick="selD(\''+d+'\');gv(\'daily\')"':'')+' >'
+      +'<div style="min-width:38px;text-align:center">'
+      +'<div style="font-size:10px;font-weight:800;color:#aaa">'+["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"][i]+'</div>'
+      +'<div style="font-size:15px;font-weight:900;color:'+(d===td?"var(--p)":"#333")+'">'+parseInt(d.split("-")[2])+'</div>'
+      +'</div>'
+      +(st.total>0
+        ?'<div style="flex:1"><div class="bar" style="height:7px"><div class="bg" style="width:'+(st.total>0?Math.round((st.correct/st.total)*100):0)+'%"></div><div class="br" style="width:'+(st.total>0?Math.round((st.wrong/st.total)*100):0)+'%"></div></div></div>'
+        +'<div style="text-align:right;min-width:80px"><span class="tag" style="color:#888;background:#f3f4f6">'+st.total+'s</span> <span style="font-size:11px;font-weight:900;color:'+(st.net>=0?"#22c55e":"#ef4444")+'">'+fnet(st.net)+'</span></div>'
+        :'<div style="flex:1;font-size:11px;color:#ddd;font-weight:600">Veri yok</div>')
+      +'</div>';
+  });
+  dayDetail+='</div>';
+
+  document.getElementById("vw").innerHTML=
+    '<div class="period-nav">'
+    +'<button onclick="wkPrev()">‹</button>'
+    +'<span style="font-size:13px">'+weekLabel+'</span>'
+    +'<button onclick="wkNext()">›</button></div>'
+    +'<div class="sgrid3">'
+    +sb("📋"+ws.total,"Toplam","#EEF2FF","var(--p)")
+    +sb("✓"+ws.correct,"Doğru","#f0fdf4","#22c55e")
+    +sb(fnet(ws.net),"Net","#F0FDF4","#16a34a")
+    +'</div>'
+    +dayCards+table+dayDetail
+    +'<div class="card" style="margin-top:4px">'
+    +'<div class="card-ttl">📊 Son 12 Hafta — Toplam Soru</div>'
+    +'<div style="position:relative;height:200px"><canvas id="weekBarChart"></canvas></div></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px">'
+    +'<button class="btn-pdf" onclick="exportWeekPDF()">📄 PDF İndir</button>'
+    +'</div>';
+  setTimeout(function(){ drawWeekBarChart(); }, 50);
+}
+
+
+function adjWeekGoal(delta){
+  var cur=getWeeklyGoal();
+  saveWeeklyGoal(Math.max(0,cur+delta));
+  renderWeekly();
+}
+function drawWeekBarChart(){
+  var el=document.getElementById('weekBarChart'); if(!el)return;
+  destroyChart('weekBar');
+  // Build last 12 weeks ending with selWeekStart (inclusive)
+  var weeks=[];
+  var ws2=selWeekStart;
+  for(var i=0;i<12;i++){
+    weeks.unshift(ws2);
+    ws2=addDays(ws2,-7);
+  }
+  var labels=weeks.map(function(w){
+    var d=w.split('-'); return d[2]+'/'+d[1];
+  });
+  var totals=weeks.map(function(w){ return wstats(w).total; });
+  var corrects=weeks.map(function(w){ return wstats(w).correct; });
+  var wrongs=weeks.map(function(w){ return wstats(w).wrong; });
+  // Highlight current week
+  var bgColors=totals.map(function(_,i){
+    return i===11?'rgba(79,70,229,0.85)':'rgba(79,70,229,0.35)';
+  });
+  var borderColors=totals.map(function(_,i){
+    return i===11?'rgba(79,70,229,1)':'rgba(79,70,229,0.5)';
+  });
+  _charts['weekBar']=new Chart(el,{
+    type:'bar',
+    data:{
+      labels:labels,
+      datasets:[
+        {label:'Doğru',data:corrects,backgroundColor:'rgba(34,197,94,0.75)',borderColor:'rgba(34,197,94,1)',borderWidth:1,borderRadius:4,stack:'s'},
+        {label:'Yanlış',data:wrongs,backgroundColor:'rgba(239,68,68,0.65)',borderColor:'rgba(239,68,68,1)',borderWidth:1,borderRadius:4,stack:'s'}
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'bottom',labels:{font:{family:'Nunito',size:10},boxWidth:10,padding:8}},
+        tooltip:{callbacks:{
+          title:function(ctx){ return 'Hafta: '+ctx[0].label; },
+          footer:function(ctx){
+            var total=ctx.reduce(function(a,c){return a+c.parsed.y;},0);
+            return 'Toplam: '+total;
+          }
+        }}
+      },
+      scales:{
+        x:{grid:{display:false},ticks:{font:{family:'Nunito',size:9},maxRotation:0}},
+        y:{grid:{color:'#f3f4f6'},ticks:{font:{family:'Nunito',size:9}},beginAtZero:true,stacked:true}
+      }
+    }
+  });
+}
+function wkPrev(){
+  var prev=addDays(selWeekStart,-7);
+  if(prev<START)return;
+  selWeekStart=prev; renderWeekly();
+}
+function wkNext(){
+  var next=addDays(selWeekStart,7),td=today();
+  if(next>weekStart(td))return;
+  selWeekStart=next; renderWeekly();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  MONTHLY VIEW
+// ═══════════════════════════════════════════════════════════════════
+function renderMonthly(){
+  var p=parseYM(selMonth),ms=mstats(selMonth);
+  var html='<div class="period-nav">'
+    +'<button onclick="mPrev()">‹</button><span>'+MONTHS[p.m]+' '+p.y+'</span><button onclick="mNext()">›</button></div>'
+    +'<div class="sgrid3">'
+    +sb("📋"+ms.total,"Toplam","#EEF2FF","var(--p)")
+    +sb("✓"+ms.correct,"Doğru","#f0fdf4","#22c55e")
+    +sb(fnet(ms.net),"Net","#F0FDF4","#16a34a")
+    +'</div>';
+
+  SUBJ.forEach(function(s){
+    var ss=mstats(selMonth,s.id);
+    var g=(goals[selMonth]&&goals[selMonth][s.id])||{targetTotal:0,targetAccuracy:0};
+    var ap=ss.total>0?parseFloat((ss.correct/ss.total*100).toFixed(2)):0;
+    var tp=g.targetTotal>0?Math.min(100,Math.round((ss.total/g.targetTotal)*100)):null;
+    html+='<div class="card" style="border:2px solid '+(ss.total>0?s.c+'44':"#f3f4f6")+'">'
+      +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:'+(ss.total>0?12:0)+'px">'
+      +'<div class="sicon" style="background:'+s.li+';width:40px;height:40px;border-radius:12px">'+s.e+'</div>'
+      +'<div style="flex:1"><div style="font-weight:900;font-size:14px;color:#222">'+s.n+'</div>'
+      +(ss.total>0
+        ?'<div style="display:flex;gap:6px;margin-top:3px;flex-wrap:wrap">'
+          +'<span class="tag" style="color:#888;background:#f3f4f6">'+ss.total+' soru</span>'
+          +'<span class="tag" style="color:#22c55e;background:#f0fdf4">✓'+ss.correct+'</span>'
+          +'<span class="tag" style="color:#ef4444;background:#fff5f5">✗'+ss.wrong+'</span>'
+          +'<span class="tag" style="color:#4F46E5;background:#EEF2FF">'+fnet(ss.net)+' net</span></div>'
+        :'<div style="font-size:11px;color:#ccc;font-weight:600;margin-top:2px">Bu ay henüz veri yok</div>')
+      +'</div>'+(ss.total>0?ring(ap,s.c,46):"")+'</div>';
+    if(ss.total>0){
+      if(tp!==null)html+='<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:#888;margin-bottom:4px"><span>📋 '+ss.total+' / '+g.targetTotal+' soru</span><span style="color:'+(tp>=100?"#22c55e":s.c)+'">%'+tp+'</span></div><div class="pbr"><div class="pfill" style="width:'+tp+'%;background:'+(tp>=100?"#22c55e":s.c)+'"></div></div></div>';
+      var gAcc=(goals[selMonth]&&goals[selMonth]["__acc"])||0; if(gAcc>0){var ad=parseFloat((ap-gAcc).toFixed(2)); html+='<div><div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-bottom:4px"><span style="color:#888">🎯 Doğruluk Hedefi %'+gAcc+'</span><span style="color:'+(ad>=0?"#22c55e":"#ef4444")+'">'+(ad>=0?"+":"")+ad+' '+(ad>=0?"✓":"✗")+'</span></div><div class="pbr"><div class="pfill" style="width:'+Math.min(100,ap)+'%;background:'+(ap>=gAcc?"#22c55e":"var(--a)")+'"></div><div class="pmark" style="left:'+Math.min(100,gAcc)+'%"></div></div></div>';}
+    }
+    html+='</div>';
+  });
+  html+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px">'
+    +'<button class="btn-pdf" onclick="exportMonthPDF()">📄 PDF İndir</button></div>';
+  document.getElementById("vw").innerHTML=html;
+}
+function mPrev(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i>0){selMonth=ms[i-1];renderMonthly();}}
+function mNext(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i<ms.length-1){selMonth=ms[i+1];renderMonthly();}}
+
+// ═══════════════════════════════════════════════════════════════════
+//  GOALS VIEW
+// ═══════════════════════════════════════════════════════════════════
+function renderGoals(){
+  var p=parseYM(selMonth);
+  var globalAcc=(goals[selMonth]&&goals[selMonth]["__acc"])||0;
+  var totalMs=mstats(selMonth);
+  var overallAp=totalMs.total>0?parseFloat((totalMs.correct/totalMs.total*100).toFixed(2)):0;
+  var html='<div class="period-nav"><button onclick="mPrev()">‹</button><span>🎯 '+MONTHS[p.m]+' '+p.y+'</span><button onclick="mNext()">›</button></div>'
+    +'<div class="tip">💡 Her ders için soru hedefi, tüm ay için tek doğruluk hedefi gir.</div>'
+    +'<div class="card" style="border:2px solid #22c55e55;margin-bottom:10px">'
+    +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'
+    +'<div style="width:42px;height:42px;border-radius:13px;background:#f0fdf4;display:flex;align-items:center;justify-content:center;font-size:22px">🎯</div>'
+    +'<div><div style="font-weight:900;font-size:15px;color:#222">Genel Doğruluk Hedefi</div>'
+    +'<div style="font-size:11px;color:#aaa;font-weight:600">Tüm dersler ortalaması — Bu ay şu an: %'+overallAp+'</div></div></div>'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(globalAcc>0&&totalMs.total>0?10:0)+'px">'
+    +'<button style="width:28px;height:28px;border-radius:8px;border:none;background:#dcfce7;color:#22c55e;font-size:15px;font-weight:900;cursor:pointer" onclick="adjGoal(\'__acc\',\'\',-5)">−</button>'
+    +'<input type="number" min="0" max="100" value="'+globalAcc+'" style="width:64px;text-align:center;border-radius:10px;border:2px solid #22c55e;font-size:17px;font-weight:900;color:#22c55e;padding:5px 0;outline:none;font-family:Nunito,sans-serif" oninput="setGoalField(\'__acc\',\'\',parseInt(this.value)||0)">'
+    +'<button style="width:28px;height:28px;border-radius:8px;border:none;background:#22c55e;color:white;font-size:15px;font-weight:900;cursor:pointer" onclick="adjGoal(\'__acc\',\'\',5)">+</button>'
+    +'<span style="font-size:13px;font-weight:700;color:#22c55e">% doğru hedefi</span></div>'
+    +(globalAcc>0&&totalMs.total>0
+      ?'<div><div class="pbr"><div class="pfill" style="width:'+Math.min(100,overallAp)+'%;background:'+(overallAp>=globalAcc?'#22c55e':'var(--a)')+'"></div><div class="pmark" style="left:'+Math.min(100,globalAcc)+'%"></div></div>'
+        +'<div style="font-size:11px;font-weight:700;color:'+(overallAp>=globalAcc?'#22c55e':'var(--a)')+';margin-top:4px">'
+        +(overallAp>=globalAcc?'✅ Hedefe ulaşıldı! (%'+overallAp+')'
+          :'Şu an %'+overallAp+' · Hedefe '+Math.max(0,globalAcc-overallAp)+' puan kaldı')
+        +'</div></div>'
+      :"")
+    +'</div>';
+  SUBJ.forEach(function(s){
+    var g=(goals[selMonth]&&goals[selMonth][s.id])||{targetTotal:0};
+    var ms=mstats(selMonth,s.id);
+    var tp=g.targetTotal>0?Math.min(100,parseFloat((ms.total/g.targetTotal*100).toFixed(2))):0;
+    html+='<div class="card" style="border:2px solid '+s.c+'22">'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
+      +'<div class="sicon" style="background:'+s.li+';width:38px;height:38px;border-radius:12px">'+s.e+'</div>'
+      +'<div style="flex:1"><div style="font-weight:900;font-size:14px;color:#222">'+s.n+'</div>'
+      +'<div style="font-size:11px;color:#aaa;font-weight:600">Bu ay: '+ms.total+' soru · Net: '+fnet(ms.net)+'</div></div></div>'
+      +'<div style="background:'+s.bg+';border-radius:12px;padding:10px 12px">'
+      +'<div style="font-size:10px;font-weight:800;color:'+s.c+';letter-spacing:.5px;margin-bottom:6px">📋 HEDEF SORU</div>'
+      +'<div style="display:flex;align-items:center;gap:6px">'
+      +'<button style="width:28px;height:28px;border-radius:8px;border:none;background:#e5e7eb;color:#666;font-size:15px;font-weight:900;cursor:pointer" onclick="adjGoal(\''+s.id+'\',\'targetTotal\',-10)">−</button>'
+      +'<input type="number" min="0" value="'+g.targetTotal+'" style="width:64px;text-align:center;border-radius:10px;border:2px solid '+s.c+';font-size:17px;font-weight:900;color:'+s.c+';padding:5px 0;outline:none;font-family:Nunito,sans-serif" oninput="setGoalField(\''+s.id+'\',\'targetTotal\',parseInt(this.value)||0)">'
+      +'<button style="width:28px;height:28px;border-radius:8px;border:none;background:'+s.c+';color:white;font-size:15px;font-weight:900;cursor:pointer" onclick="adjGoal(\''+s.id+'\',\'targetTotal\',10)">+</button>'
+      +'<span style="font-size:12px;font-weight:700;color:'+s.c+';margin-left:2px">soru</span>'
+      +(g.targetTotal>0&&ms.total>0?'<span style="font-size:11px;font-weight:700;color:'+(tp>=100?'#22c55e':s.c)+';margin-left:6px">'+ms.total+'/'+g.targetTotal+' (%'+tp+')</span>':"")
+      +'</div>'
+      +(g.targetTotal>0&&ms.total>0?'<div style="margin-top:8px"><div class="pbr"><div class="pfill" style="width:'+tp+'%;background:'+(tp>=100?'#22c55e':s.c)+'"></div></div></div>':"")
+      +'</div></div>';
+  });
+  if(!READONLY) html+='<button id="goal-btn" onclick="saveGoals()" style="width:100%;padding:15px;border-radius:16px;border:none;background:linear-gradient(135deg,var(--p),var(--v));color:white;font-size:16px;font-weight:900;box-shadow:0 4px 20px #4F46E555;font-family:Nunito,sans-serif">🎯 Hedefleri Kaydet</button>';
+  else html+='<div style="text-align:center;padding:12px;background:#FEF3C7;border-radius:12px;font-size:12px;font-weight:800;color:#92400E">👁️ Görüntüleme modunda hedef değiştirilemez</div>';
+  document.getElementById("vw").innerHTML=html;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  STATS VIEW
+// ═══════════════════════════════════════════════════════════════════
+function renderStats(){
+  var allDays=Object.keys(recs).filter(function(d){return d>=START;}).sort();
+  var sat=SUBJ.map(function(s){
+    var t=allDays.reduce(function(a,d){return a+((recs[d]&&recs[d][s.id]&&recs[d][s.id].total)||0);},0);
+    var c2=allDays.reduce(function(a,d){return a+((recs[d]&&recs[d][s.id]&&recs[d][s.id].correct)||0);},0);
+    var w=cw(t,c2);
+    return {id:s.id,n:s.n,e:s.e,c:s.c,bg:s.bg,li:s.li,total:t,correct:c2,wrong:w,net:calcNet(c2,w)};
+  });
+  var gt=sat.reduce(function(a,s){return a+s.total;},0);
+  var gc=sat.reduce(function(a,s){return a+s.correct;},0);
+  var gw=sat.reduce(function(a,s){return a+s.wrong;},0);
+  var gn=calcNet(gc,gw),gap=gt>0?parseFloat((gc/gt*100).toFixed(2)):0;
+  var active=allDays.filter(function(d){return dstats(d).total>0;}).length;
+  var maxT=Math.max.apply(null,sat.map(function(s){return s.total;}).concat([1]));
+
+  // Monthly data for line chart
+  var activeMonths=availMonths().filter(function(ym){return mstats(ym).total>0;});
+
+  // Ranking HTML
+  var rnk="";
+  sat.slice().sort(function(a,b){return b.total-a.total;}).forEach(function(s,i){
+    var ap=s.total>0?parseFloat((s.correct/s.total*100).toFixed(2)):0;
+    rnk+='<div style="margin-bottom:14px">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'
+      +'<span style="font-size:16px;min-width:26px">'+(i===0?"🥇":i===1?"🥈":i===2?"🥉":(i+1)+".")+'</span>'
+      +'<span style="font-size:18px">'+s.e+'</span>'
+      +'<span style="flex:1;font-weight:800;font-size:14px;color:#333">'+s.n+'</span>'
+      +ring(ap,s.c,44)
+      +'<div style="text-align:right;min-width:60px">'
+      +'<div style="font-size:12px;font-weight:900;color:'+s.c+'">'+s.total+'s</div>'
+      +'<div style="font-size:11px;font-weight:800;color:'+(s.net>=0?"#22c55e":"#ef4444")+'">'+fnet(s.net)+' net</div>'
+      +'</div></div>'
+      +'<div class="bar"><div class="bg" style="width:'+(s.total>0?(s.correct/maxT)*100:0)+'%"></div>'
+      +'<div class="br" style="width:'+(s.total>0?(s.wrong/maxT)*100:0)+'%"></div>'
+      +'<div style="flex:1;background:#e5e7eb"></div></div>'
+      +'<div style="display:flex;gap:10px;margin-top:3px;font-size:10px;font-weight:700">'
+      +'<span style="color:#22c55e">✓'+s.correct+' (%'+ap+')</span>'
+      +'<span style="color:#ef4444">✗'+s.wrong+'</span>'
+      +'<span style="color:var(--p)">Net:'+fnet(s.net)+'</span>'
+      +'</div></div>';
+  });
+
+  // Monthly summary rows
+  var mrows="";
+  availMonths().slice().reverse().forEach(function(ymStr){
+    var ms=mstats(ymStr),p2=parseYM(ymStr);
+    if(!ms.total)return;
+    mrows+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f3f4f6">'
+      +'<div style="min-width:76px;font-weight:800;font-size:13px;color:var(--p)">'+MONTHS[p2.m]+' '+p2.y+'</div>'
+      +'<div style="flex:1;display:flex;gap:5px;flex-wrap:wrap">'
+      +'<span class="tag" style="color:var(--p);background:#EEF2FF">📋'+ms.total+'</span>'
+      +'<span class="tag" style="color:#22c55e;background:#f0fdf4">✓'+ms.correct+'</span>'
+      +'<span class="tag" style="color:#ef4444;background:#fff5f5">✗'+ms.wrong+'</span>'
+      +'</div>'
+      +'<div style="font-size:12px;font-weight:900;color:'+(ms.net>=0?"#22c55e":"#ef4444")+';min-width:56px;text-align:right">'+fnet(ms.net)+' net</div>'
+      +'</div>';
+  });
+
+  document.getElementById("vw").innerHTML=
+    // Top stats grid
+    '<div class="sgrid2">'
+    +'<div style="background:linear-gradient(135deg,var(--p),var(--v));border-radius:18px;padding:16px;color:white;box-shadow:0 4px 20px #4F46E544"><div style="font-size:11px;opacity:.75;margin-bottom:4px">Toplam Soru</div><div style="font-size:34px;font-weight:900">'+gt+'</div></div>'
+    +'<div style="background:linear-gradient(135deg,var(--a),#d97706);border-radius:18px;padding:16px;color:white;box-shadow:0 4px 20px #f59e0b44"><div style="font-size:11px;opacity:.75;margin-bottom:4px">Aktif Gün</div><div style="font-size:34px;font-weight:900">'+active+'</div></div>'
+    +'<div style="background:linear-gradient(135deg,#22c55e,#16a34a);border-radius:18px;padding:16px;color:white;box-shadow:0 4px 20px #22c55e44"><div style="font-size:11px;opacity:.75;margin-bottom:4px">Toplam Doğru</div><div style="font-size:34px;font-weight:900">'+gc+'</div>'+(gt>0?'<div style="font-size:12px;opacity:.85">%'+Math.round((gc/gt)*100)+'</div>':"")+'</div>'
+    +'<div style="background:linear-gradient(135deg,#ef4444,#dc2626);border-radius:18px;padding:16px;color:white;box-shadow:0 4px 20px #ef444444"><div style="font-size:11px;opacity:.75;margin-bottom:4px">Toplam Yanlış</div><div style="font-size:34px;font-weight:900">'+gw+'</div>'+(gt>0?'<div style="font-size:12px;opacity:.85">%'+Math.round((gw/gt)*100)+'</div>':"")+'</div>'
+    +'</div>'
+    // Net score card
+    +'<div class="card" style="display:flex;align-items:center;gap:16px">'
+    +'<div style="flex:1"><div style="font-size:13px;color:#888;font-weight:700">Genel Net Puan</div>'
+    +'<div style="font-size:34px;font-weight:900;color:var(--p)">'+fnet(gn)+'</div>'
+    +'<div style="font-size:11px;color:#aaa;font-weight:700;margin-top:2px">= Doğru − Yanlış÷4</div></div>'
+    +ring(gap,"var(--p)",70)+'</div>'
+    // Radar chart (all subjects except Deneme)
+    +(gt>0?'<div class="card"><div class="card-ttl">🕸️ Ders Radar Analizi <span style="font-size:11px;color:#aaa;font-weight:600">(Deneme hariç)</span></div><div style="position:relative;height:280px"><canvas id="radarChart"></canvas></div></div>':"")
+    // Monthly line chart
+    +(activeMonths.length>1?'<div class="card"><div class="card-ttl">📈 Aylık Net Gelişim</div><div class="chart-tabs" style="display:flex;gap:6px;margin-bottom:10px">'
+      +'<button class="chart-tab act" onclick="switchLineChart(this,\'net\')">Net</button>'
+      +'<button class="chart-tab" onclick="switchLineChart(this,\'total\')">Toplam Soru</button>'
+      +'<button class="chart-tab" onclick="switchLineChart(this,\'acc\')">Doğruluk %</button>'
+      +'</div><div style="position:relative;height:220px"><canvas id="lineChart"></canvas></div></div>':"")
+    // Subject line chart per-month
+    +(activeMonths.length>1?'<div class="card"><div class="card-ttl">📊 Aylık Ders Net Karşılaştırması</div><div style="position:relative;height:260px"><canvas id="subjectLineChart"></canvas></div></div>':"")
+    // Rankings
+    +'<div class="card"><div class="card-ttl">🏆 Ders Sıralaması</div>'+(gt>0?rnk:'<div class="empty"><div style="font-size:44px;margin-bottom:10px">📭</div><div>Henüz veri yok</div></div>')+'</div>'
+    +(mrows?'<div class="card"><div class="card-ttl">📅 Aylık Özet</div>'+mrows+'</div>':"")
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px">'
+    +'<button class="btn-pdf" onclick="exportStatsPDF()">📄 Tüm İstatistik PDF</button></div>'
+    +'<div style="text-align:center;margin-top:8px;font-size:11px;color:#ccc;font-weight:700">1 Ocak 2026\'dan itibaren · Net = Doğru − Yanlış÷4</div>';
+
+  // Draw charts after DOM update
+  if(gt>0) setTimeout(function(){ drawCharts(sat, activeMonths); }, 50);
+}
+
+// Chart instances (destroy before redraw)
+var _charts = {};
+function destroyChart(id){if(_charts[id]){_charts[id].destroy();delete _charts[id];}}
+
+var _lineMode = 'net';
+function switchLineChart(btn, mode){
+  _lineMode = mode;
+  document.querySelectorAll('.chart-tab').forEach(function(b){b.classList.remove('act');});
+  btn.classList.add('act');
+  var allDays=Object.keys(recs).filter(function(d){return d>=START;}).sort();
+  var sat=SUBJ.map(function(s){
+    var t=allDays.reduce(function(a,d){return a+((recs[d]&&recs[d][s.id]&&recs[d][s.id].total)||0);},0);
+    var c2=allDays.reduce(function(a,d){return a+((recs[d]&&recs[d][s.id]&&recs[d][s.id].correct)||0);},0);
+    var w=cw(t,c2);
+    return {id:s.id,n:s.n,c:s.c,total:t,correct:c2,wrong:w,net:calcNet(c2,w)};
+  });
+  var activeMonths=availMonths().filter(function(ym){return mstats(ym).total>0;});
+  drawLineChart(activeMonths, mode);
+}
+
+function drawCharts(sat, activeMonths){
+  drawRadarChart(sat);
+  if(activeMonths.length>1){
+    drawLineChart(activeMonths, _lineMode);
+    drawSubjectLineChart(activeMonths);
+  }
+}
+
+function drawRadarChart(sat){
+  var el=document.getElementById('radarChart'); if(!el)return;
+  destroyChart('radar');
+  var subjData=sat.filter(function(s){return s.id!=='deneme';});
+  var labels=subjData.map(function(s){return s.n;});
+  var accVals=subjData.map(function(s){
+    return s.total>0?parseFloat((s.correct/s.total*100).toFixed(2)):0;
+  });
+  _charts['radar']=new Chart(el,{
+    type:'radar',
+    data:{
+      labels:labels,
+      datasets:[
+        {label:'Doğruluk %',data:accVals,backgroundColor:'rgba(79,70,229,0.18)',borderColor:'rgba(79,70,229,0.9)',borderWidth:2.5,pointBackgroundColor:'rgba(79,70,229,1)',pointRadius:5,pointHoverRadius:7}
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ' '+ctx.parsed.r.toFixed(2)+'%';}}}},
+      scales:{r:{min:80,max:100,ticks:{stepSize:5,font:{size:9},color:'#aaa',backdropColor:'transparent'},grid:{color:'#e5e7eb'},pointLabels:{font:{family:'Nunito',size:11,weight:'bold'},color:'#333'},angleLines:{color:'#e5e7eb'}}}}
+  });
+}
+
+function drawMonthlyRadarChart(selMonth){
+  var el=document.getElementById('monthRadarChart'); if(!el)return;
+  destroyChart('monthRadar');
+  var subjData=SUBJ.filter(function(s){return s.id!=='deneme';});
+  var labels=subjData.map(function(s){return s.n;});
+  var g_acc=(goals[selMonth]&&goals[selMonth]['__acc'])||0;
+  // Hedef gerçekleşme: soru hedefi için tamamlanma yüzdesi, doğruluk için gerçekleşme
+  var goalVals=subjData.map(function(s){
+    var g=(goals[selMonth]&&goals[selMonth][s.id])||{targetTotal:0};
+    var ss=mstats(selMonth,s.id);
+    if(!g.targetTotal) return 0;
+    return Math.min(100,parseFloat((ss.total/g.targetTotal*100).toFixed(2)));
+  });
+  var accVals=subjData.map(function(s){
+    var ss=mstats(selMonth,s.id);
+    return ss.total>0?parseFloat((ss.correct/ss.total*100).toFixed(2)):0;
+  });
+  var hasGoals=subjData.some(function(s){
+    return (goals[selMonth]&&goals[selMonth][s.id]&&goals[selMonth][s.id].targetTotal>0);
+  });
+  var colors=subjData.map(function(s){return s.c;});
+  var datasets=[
+    {label:'Doğruluk %',data:accVals,backgroundColor:'rgba(79,70,229,0.15)',borderColor:'rgba(79,70,229,0.85)',borderWidth:2.5,pointBackgroundColor:'rgba(79,70,229,1)',pointRadius:5}
+  ];
+  if(hasGoals){
+    datasets.push({label:'Soru Hedefi Gerç. %',data:goalVals,backgroundColor:'rgba(34,197,94,0.12)',borderColor:'rgba(34,197,94,0.85)',borderWidth:2,pointBackgroundColor:'rgba(34,197,94,1)',pointRadius:4,borderDash:[5,3]});
+  }
+  _charts['monthRadar']=new Chart(el,{
+    type:'radar',
+    data:{labels:labels,datasets:datasets},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{font:{family:'Nunito',size:11},boxWidth:10,padding:8}},
+        tooltip:{callbacks:{label:function(ctx){return ' '+ctx.dataset.label+': '+ctx.parsed.r.toFixed(2)+'%';}}}},
+      scales:{r:{min:0,max:100,ticks:{stepSize:25,font:{size:9},color:'#aaa',backdropColor:'transparent'},grid:{color:'#e5e7eb'},pointLabels:{font:{family:'Nunito',size:11,weight:'bold'},color:'#333'},angleLines:{color:'#e5e7eb'}}}}
+  });
+}
+
+function drawLineChart(activeMonths, mode){
+  var el=document.getElementById('lineChart'); if(!el)return;
+  destroyChart('line');
+  var labels=activeMonths.map(function(ym){var p=parseYM(ym);return MONTHS[p.m].substring(0,3)+' '+String(p.y).slice(2);});
+  var vals=activeMonths.map(function(ym){
+    var ms=mstats(ym);
+    if(mode==='net') return fnet(ms.net);
+    if(mode==='total') return ms.total;
+    return ms.total>0?parseFloat((ms.correct/ms.total*100).toFixed(2)):0;
+  });
+  var yLabel=mode==='net'?'Net Puan':mode==='total'?'Soru Sayısı':'Doğruluk %';
+  var color='rgba(79,70,229,1)';
+  _charts['line']=new Chart(el,{
+    type:'line',
+    data:{labels:labels,datasets:[{label:yLabel,data:vals,borderColor:color,backgroundColor:'rgba(79,70,229,0.08)',borderWidth:2.5,pointBackgroundColor:color,pointRadius:5,pointHoverRadius:7,fill:true,tension:0.35}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ' '+ctx.parsed.y+(mode==='acc'?'%':'');},titleFont:{family:'Nunito'},bodyFont:{family:'Nunito'}}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{family:'Nunito',size:10}}},
+        y:{grid:{color:'#f3f4f6'},ticks:{font:{family:'Nunito',size:10}},min:50,beginAtZero:false}
+      }
+    }
+  });
+}
+
+function drawSubjectLineChart(activeMonths){
+  var el=document.getElementById('subjectLineChart'); if(!el)return;
+  destroyChart('subjLine');
+  var labels=activeMonths.map(function(ym){var p=parseYM(ym);return MONTHS[p.m].substring(0,3)+' '+String(p.y).slice(2);});
+  var datasets=SUBJ.filter(function(s){return s.id!=='deneme';}).map(function(s){
+    var vals=activeMonths.map(function(ym){return fnet(mstats(ym,s.id).net);});
+    var hasData=vals.some(function(v){return v!==0;});
+    return {label:s.n,data:vals,borderColor:s.c,backgroundColor:'transparent',borderWidth:2,pointBackgroundColor:s.c,pointRadius:3,pointHoverRadius:5,tension:0.3,hidden:!hasData};
+  });
+  _charts['subjLine']=new Chart(el,{
+    type:'line',
+    data:{labels:labels,datasets:datasets},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{font:{family:'Nunito',size:10},boxWidth:10,padding:8}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{family:'Nunito',size:10}}},
+        y:{grid:{color:'#f3f4f6'},ticks:{font:{family:'Nunito',size:10}},title:{display:true,text:'Net Puan',font:{family:'Nunito',size:10}}}
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  PDF EXPORT
+// ═══════════════════════════════════════════════════════════════════
+// ── PDF UTILITIES ─────────────────────────────────────────────────
+// Turkish character fix for jsPDF (helvetica doesn't support ş,ğ,ü,ö,ç,ı)
+function tr(s){
+  return String(s||"")
+    .replace(/ş/g,"s").replace(/Ş/g,"S")
+    .replace(/ğ/g,"g").replace(/Ğ/g,"G")
+    .replace(/ü/g,"u").replace(/Ü/g,"U")
+    .replace(/ö/g,"o").replace(/Ö/g,"O")
+    .replace(/ç/g,"c").replace(/Ç/g,"C")
+    .replace(/ı/g,"i").replace(/İ/g,"I")
+    .replace(/â/g,"a").replace(/î/g,"i").replace(/û/g,"u");
+}
+// Emoji → short text label
+var SUBJ_LABELS = {
+  matematik:"[Mat]", turkce:"[Tur]", fen:"[Fen]",
+  sosyal:"[Sos]", ingilizce:"[Ing]", din:"[Din]", deneme:"[Den]"
+};
+
+function getJsPDF(){
+  if(window.jspdf&&window.jspdf.jsPDF) return window.jspdf.jsPDF;
+  if(window.jsPDF) return window.jsPDF;
+  return null;
+}
+
+// Draw colored header bar
+function pdfHeader(doc,title,sub){
+  var st=STUDENTS[curStudent];
+  doc.setFillColor(79,70,229);
+  doc.rect(0,0,210,36,'F');
+  doc.setFillColor(99,91,255);
+  doc.rect(0,28,210,8,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont("helvetica","bold");
+  doc.setFontSize(15); doc.text(tr(title),14,14);
+  doc.setFontSize(9);
+  doc.text(tr(st.name)+" | "+tr(sub),14,22);
+  doc.text("Net = Dogru - Yanlis / 4",14,31);
+  doc.text(new Date().toLocaleDateString("tr-TR"),196,31,{align:"right"});
+  doc.setTextColor(30,30,30);
+  return 44;
+}
+
+// Section title with colored background
+function pdfSection(doc,y,title,r,g,b){
+  if(y>268){doc.addPage();y=16;}
+  r=r||79;g=g||70;b=b||229;
+  doc.setFillColor(r,g,b);
+  doc.roundedRect(14,y,182,8,2,2,'F');
+  doc.setFont("helvetica","bold"); doc.setFontSize(10);
+  doc.setTextColor(255,255,255);
+  doc.text(tr(title),17,y+5.5);
+  doc.setTextColor(30,30,30);
+  return y+12;
+}
+
+// Summary stats box
+function pdfSummaryBox(doc,y,total,correct,wrong,net,extra){
+  doc.setFillColor(238,242,255);
+  doc.roundedRect(14,y,182,extra?26:18,3,3,'F');
+  doc.setFont("helvetica","bold"); doc.setFontSize(10);
+  doc.setTextColor(60,60,60);
+  doc.text("Toplam: "+total+" soru",18,y+7);
+  doc.text("Dogru: "+correct,68,y+7);
+  doc.text("Yanlis: "+wrong,108,y+7);
+  doc.setTextColor(79,70,229);
+  doc.text("Net: "+fnet(net),152,y+7);
+  doc.setTextColor(60,60,60);
+  if(extra){
+    extra.forEach(function(e,i){ doc.text(tr(e),18+i*60,y+17); });
+  }
+  doc.setTextColor(30,30,30);
+  return y+(extra?30:22);
+}
+
+// Subject row with rich comparison
+function pdfSubjRow(doc,y,s,t,c,w,n,pct,prevN,goalT,goalA){
+  if(y>260){doc.addPage();y=16;}
+  // Subject label box
+  doc.setFillColor(245,245,255);
+  doc.roundedRect(14,y-4,182,22,2,2,'F');
+  // Label
+  doc.setFont("helvetica","bold"); doc.setFontSize(10);
+  doc.setTextColor(50,50,50);
+  var label=SUBJ_LABELS[s.id]||"[?]";
+  doc.text(label+" "+tr(s.n),16,y+4);
+  // Stats
+  doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  doc.setTextColor(80,80,80);
+  doc.text("Top:"+t,74,y+4);
+  doc.text("Dog:"+c,95,y+4);
+  doc.text("Yan:"+w,116,y+4);
+  doc.text("%"+pct,138,y+4);
+  // Net with color
+  doc.setFont("helvetica","bold"); doc.setFontSize(10);
+  doc.setTextColor(n>=0?22:220, n>=0?163:38, n>=0?74:38);
+  doc.text("Net:"+fnet(n),152,y+4);
+  // Change vs prev
+  if(prevN!==null&&prevN!==undefined){
+    var delta=fnet(n-prevN);
+    var sign=n>=prevN?"+":"";
+    doc.setTextColor(n>=prevN?22:220, n>=prevN?163:38, n>=prevN?74:38);
+    doc.setFontSize(8);
+    doc.text(tr("Onceki:"+fnet(prevN)+" ("+sign+delta+")"),16,y+11);
+  }
+  // Goal comparison
+  if(goalT||goalA){
+    var gparts=[];
+    if(goalT) gparts.push("Hedef:"+goalT+"s "+(t>=goalT?"OK":Math.round((t/goalT)*100)+"%"));
+    if(goalA) gparts.push("Hdf%"+goalA+" "+(pct>=goalA?"OK":"Suan%"+pct));
+    doc.setTextColor(100,100,150); doc.setFontSize(8);
+    doc.text(gparts.join("  "),prevN!==null&&prevN!==undefined?90:16,y+11);
+  }
+  doc.setTextColor(30,30,30);
+  // Progress bar (full width)
+  doc.setFillColor(220,220,220); doc.roundedRect(14,y+13,182,3,1,1,'F');
+  if(pct>0){
+    doc.setFillColor(34,197,94);
+    doc.roundedRect(14,y+13,182*(pct/100),3,1,1,'F');
+  }
+  // Goal marker on bar
+  if(goalA&&goalA>0){
+    doc.setFillColor(79,70,229);
+    doc.rect(14+182*(Math.min(goalA,100)/100)-1,y+12,2,5,'F');
+  }
+  return y+22;
+}
+
+// ── MONTHLY PDF ──────────────────────────────────────────────────
+function exportMonthPDF(){
+  var JsPDF=getJsPDF(); if(!JsPDF){alert("PDF kutuphanesi yuklenemedi.");return;}
+  var doc=new JsPDF();
+  var p=parseYM(selMonth), ms=mstats(selMonth);
+  // Previous month comparison
+  var allM=availMonths(), mIdx=allM.indexOf(selMonth);
+  var prevM=mIdx>0?allM[mIdx-1]:null;
+  var prevMs=prevM?mstats(prevM):null;
+
+  var y=pdfHeader(doc, tr(MONTHS[p.m])+" "+p.y+" - Aylik Rapor", tr(MONTHS[p.m])+" "+p.y);
+
+  // Summary with comparison
+  var extras=null;
+  if(prevMs&&prevMs.total){
+    var netDiff=fnet(ms.net-prevMs.net);
+    var sign=ms.net>=prevMs.net?"+":"";
+    extras=[
+      tr("Onceki ay: "+(prevM?"":"")+prevMs.total+" soru"),
+      tr("Net degisim: "+sign+netDiff),
+      tr("Aktif gun: "+Object.keys(recs).filter(function(d){return d.startsWith(selMonth)&&dstats(d).total>0;}).length)
+    ];
+  } else {
+    extras=[tr("Aktif gun: "+Object.keys(recs).filter(function(d){return d.startsWith(selMonth)&&dstats(d).total>0;}).length)];
+  }
+  y=pdfSummaryBox(doc,y,ms.total,ms.correct,ms.wrong,ms.net,extras);
+  y+=4;
+
+  // Goals progress
+  var monthGoals=goals[selMonth]||{};
+  var hasGoals=Object.keys(monthGoals).some(function(k){return monthGoals[k].targetTotal||monthGoals[k].targetAccuracy;});
+  if(hasGoals){
+    y=pdfSection(doc,y,"Hedef Karsilastirma",16,163,74);
+    var totalGoal=SUBJ.reduce(function(a,s){return a+((monthGoals[s.id]&&monthGoals[s.id].targetTotal)||0);},0);
+    if(totalGoal){
+      var overallPct=Math.round((ms.total/totalGoal)*100);
+      doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(60,60,60);
+      doc.text(tr("Toplam hedef: "+totalGoal+" soru — Tamamlanan: "+ms.total+" (%"+Math.min(overallPct,100)+")"),16,y);
+      // Overall goal bar
+      doc.setFillColor(220,220,220); doc.roundedRect(14,y+2,182,4,1,1,'F');
+      doc.setFillColor(overallPct>=100?34:79,overallPct>=100?197:70,overallPct>=100?94:229);
+      doc.roundedRect(14,y+2,182*(Math.min(overallPct,100)/100),4,1,1,'F');
+      y+=12;
+    }
+  }
+
+  // Ders detaylari
+  y=pdfSection(doc,y,"Ders Detaylari");
+  SUBJ.forEach(function(s){
+    var ss=mstats(selMonth,s.id);
+    if(!ss.total)return;
+    var pct=ss.total>0?Math.round((ss.correct/ss.total)*100):0;
+    var prevSN=prevMs?null:null;
+    if(prevM){var pss=mstats(prevM,s.id); prevSN=pss.total?pss.net:null;}
+    var g=monthGoals[s.id]||{};
+    var gA2=(goals[selMonth]&&goals[selMonth]['__acc'])||0; y=pdfSubjRow(doc,y,s,ss.total,ss.correct,ss.wrong,ss.net,pct,prevSN,g.targetTotal||0,gA2);
+  });
+
+  // Haftalik dagilim
+  y+=4;
+  y=pdfSection(doc,y,"Haftalik Dagilim",245,158,11);
+  // Find weeks in this month
+  var p2=parseYM(selMonth);
+  var firstDay=ds(p2.y,p2.m,1);
+  var lastDay=ds(p2.y,p2.m,dim(p2.y,p2.m));
+  var ws2=weekStart(firstDay);
+  var weekNum=1;
+  while(ws2<=lastDay){
+    var wDays=weekDays(ws2);
+    var wt=0,wc=0,ww=0;
+    wDays.forEach(function(d){
+      if(d<firstDay||d>lastDay)return;
+      var st2=dstats(d); wt+=st2.total; wc+=st2.correct; ww+=st2.wrong;
+    });
+    if(wt>0){
+      if(y>270){doc.addPage();y=16;}
+      doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(60,60,60);
+      doc.text(weekNum+". Hafta ("+fmtD(ws2)+")",16,y);
+      doc.setFont("helvetica","normal");
+      doc.text("Top:"+wt+"  Dog:"+wc+"  Yan:"+ww,70,y);
+      doc.setTextColor(calcNet(wc,ww)>=0?22:220,calcNet(wc,ww)>=0?163:38,calcNet(wc,ww)>=0?74:38);
+      doc.text("Net:"+fnet(calcNet(wc,ww)),148,y);
+      doc.setTextColor(30,30,30);
+      y+=7;
+    }
+    ws2=addDays(ws2,7); weekNum++;
+    if(weekNum>6)break;
+  }
+
+  // En iyi / en kotu gun
+  y+=4;
+  var mDays=Object.keys(recs).filter(function(d){return d.startsWith(selMonth)&&dstats(d).total>0;}).sort();
+  if(mDays.length>1){
+    y=pdfSection(doc,y,"En Iyi / En Zayif Gun",220,38,38);
+    var byNet=mDays.map(function(d){var s=dstats(d);return{d:d,net:s.net,total:s.total};});
+    byNet.sort(function(a,b){return b.net-a.net;});
+    doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(22,163,74);
+    doc.text("En iyi: "+fmtD(byNet[0].d)+" — Net "+fnet(byNet[0].net)+" ("+byNet[0].total+" soru)",16,y);
+    doc.setTextColor(220,38,38);
+    doc.text("En zayif: "+fmtD(byNet[byNet.length-1].d)+" — Net "+fnet(byNet[byNet.length-1].net),16,y+7);
+    doc.setTextColor(30,30,30);
+    y+=16;
+  }
+
+  doc.save(tr(STUDENTS[curStudent].short).replace(/ /g,"_")+"_"+selMonth+"_rapor.pdf");
+}
+
+// ── WEEKLY PDF ──────────────────────────────────────────────────
+function exportWeekPDF(){
+  var JsPDF=getJsPDF(); if(!JsPDF){alert("PDF kutuphanesi yuklenemedi.");return;}
+  var doc=new JsPDF();
+  var days=weekDays(selWeekStart), ws=wstats(selWeekStart);
+  var label=fmtD(selWeekStart)+" - "+fmtD(days[6]);
+  // Previous week
+  var prevWS=addDays(selWeekStart,-7);
+  var prevWst=wstats(prevWS);
+  var y=pdfHeader(doc,"Haftalik Rapor",label);
+
+  var extras=[tr("Onceki hafta: "+prevWst.total+" soru, Net:"+fnet(prevWst.net))];
+  if(prevWst.total){
+    var sign=ws.net>=prevWst.net?"+":"";
+    extras.push(tr("Degisim: "+sign+fnet(ws.net-prevWst.net)));
+  }
+  extras.push(tr("Aktif gun: "+days.filter(function(d){return dstats(d).total>0;}).length+"/7"));
+  y=pdfSummaryBox(doc,y,ws.total,ws.correct,ws.wrong,ws.net,extras);
+  y+=4;
+
+  // Gunluk dagilim
+  y=pdfSection(doc,y,"Gunluk Dagilim",245,158,11);
+  var dnames=["Pzt","Sal","Car","Per","Cum","Cmt","Paz"];
+  var maxDayTotal=Math.max.apply(null,days.map(function(d){return dstats(d).total;}).concat([1]));
+  days.forEach(function(d,i){
+    var st=dstats(d);
+    if(y>268){doc.addPage();y=16;}
+    doc.setFillColor(st.total>0?238:250,st.total>0?242:250,st.total>0?255:250);
+    doc.roundedRect(14,y-3,182,10,2,2,'F');
+    doc.setFont("helvetica","bold"); doc.setFontSize(9);
+    doc.setTextColor(st.total>0?50:180,st.total>0?50:180,st.total>0?50:180);
+    doc.text(dnames[i]+" "+fmtD(d),16,y+4);
+    if(st.total>0){
+      doc.setFont("helvetica","normal");
+      doc.text("Top:"+st.total+"  Dog:"+st.correct+"  Yan:"+st.wrong,60,y+4);
+      doc.setFont("helvetica","bold");
+      doc.setTextColor(st.net>=0?22:220,st.net>=0?163:38,st.net>=0?74:38);
+      doc.text("Net:"+fnet(st.net),148,y+4);
+      // Mini bar
+      doc.setFillColor(200,200,200); doc.rect(14,y+5,182*(st.total/maxDayTotal),2,'F');
+      var cpct=st.total>0?st.correct/st.total:0;
+      doc.setFillColor(34,197,94); doc.rect(14,y+5,182*(st.total/maxDayTotal)*cpct,2,'F');
+    } else {
+      doc.setTextColor(180,180,180); doc.setFont("helvetica","normal"); doc.setFontSize(8);
+      doc.text("Calisma yok",60,y+4);
+    }
+    doc.setTextColor(30,30,30); y+=12;
+  });
+  y+=4;
+
+  // Ders bazli
+  y=pdfSection(doc,y,"Ders Detaylari");
+  SUBJ.forEach(function(s){
+    var t=0,c=0,w=0;
+    days.forEach(function(d){var r=(recs[d]&&recs[d][s.id])||{};t+=r.total||0;c+=r.correct||0;w+=cw(r.total||0,r.correct||0);});
+    if(!t)return;
+    // Prev week same subject
+    var pT=0,pC=0,pW=0;
+    weekDays(prevWS).forEach(function(d){var r=(recs[d]&&recs[d][s.id])||{};pT+=r.total||0;pC+=r.correct||0;pW+=cw(r.total||0,r.correct||0);});
+    var prevN2=pT>0?calcNet(pC,pW):null;
+    var pct=Math.round((c/t)*100);
+    y=pdfSubjRow(doc,y,s,t,c,w,calcNet(c,w),pct,prevN2,0,0);
+  });
+
+  doc.save(tr(STUDENTS[curStudent].short).replace(/ /g,"_")+"_haftalik_"+selWeekStart+".pdf");
+}
+
+// ── STATS PDF ──────────────────────────────────────────────────
+function exportStatsPDF(){
+  var JsPDF=getJsPDF(); if(!JsPDF){alert("PDF kutuphanesi yuklenemedi.");return;}
+  var doc=new JsPDF();
+  var allDays=Object.keys(recs).filter(function(d){return d>=START;}).sort();
+  var sat=SUBJ.map(function(s){
+    var t=allDays.reduce(function(a,d){return a+((recs[d]&&recs[d][s.id]&&recs[d][s.id].total)||0);},0);
+    var c2=allDays.reduce(function(a,d){return a+((recs[d]&&recs[d][s.id]&&recs[d][s.id].correct)||0);},0);
+    var w=cw(t,c2);
+    return {id:s.id,n:s.n,e:s.e,c:s.c,total:t,correct:c2,wrong:w,net:calcNet(c2,w)};
+  });
+  var gt=sat.reduce(function(a,s){return a+s.total;},0);
+  var gc=sat.reduce(function(a,s){return a+s.correct;},0);
+  var gw=sat.reduce(function(a,s){return a+s.wrong;},0);
+  var active=allDays.filter(function(d){return dstats(d).total>0;}).length;
+  var gn=calcNet(gc,gw);
+  var y=pdfHeader(doc,"Genel Istatistik Raporu","Tum Zamanlar");
+
+  var extras=[
+    tr("Aktif gun: "+active),
+    tr("Toplam yanlis: "+gw),
+    gt>0?tr("Dogru orani: %"+Math.round((gc/gt)*100)):""
+  ];
+  y=pdfSummaryBox(doc,y,gt,gc,gw,gn,extras);
+  y+=4;
+
+  // Ders siralaması
+  y=pdfSection(doc,y,"Ders Siralaması (Toplama Gore)");
+  sat.slice().sort(function(a,b){return b.total-a.total;}).forEach(function(s,i){
+    if(!s.total)return;
+    var pct=Math.round((s.correct/s.total)*100);
+    y=pdfSubjRow(doc,y,s,s.total,s.correct,s.wrong,s.net,pct,null,0,0);
+  });
+
+  // Monthly breakdown — page 2
+  doc.addPage(); y=16;
+  doc.setFillColor(79,70,229); doc.rect(0,0,210,12,'F');
+  doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor(255,255,255);
+  doc.text(tr(STUDENTS[curStudent].name)+" | Aylik Gelisim",14,8);
+  doc.setTextColor(30,30,30); y=20;
+
+  // Table header
+  doc.setFillColor(238,242,255); doc.rect(14,y,182,8,'F');
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(60,60,60);
+  doc.text("Ay",16,y+5.5);
+  doc.text("Toplam",50,y+5.5); doc.text("Dogru",80,y+5.5);
+  doc.text("Yanlis",108,y+5.5); doc.text("Net",136,y+5.5);
+  doc.text("Ort/Gun",155,y+5.5); doc.text("Degisim",178,y+5.5);
+  y+=10;
+
+  var prevMonthNet=null;
+  availMonths().forEach(function(ymStr){
+    var ms2=mstats(ymStr),p3=parseYM(ymStr);
+    if(!ms2.total){prevMonthNet=null;return;}
+    if(y>278){doc.addPage();y=16;}
+    var activeDaysM=Object.keys(recs).filter(function(d){return d.startsWith(ymStr)&&dstats(d).total>0;}).length;
+    var avgPerDay=activeDaysM>0?Math.round(ms2.total/activeDaysM):0;
+    var delta=prevMonthNet!==null?fnet(ms2.net-prevMonthNet):"-";
+    var sign=(prevMonthNet!==null&&ms2.net>=prevMonthNet)?"+":"";
+    // Alternate row bg
+    var rowIdx=availMonths().indexOf(ymStr);
+    if(rowIdx%2===0){doc.setFillColor(248,248,255); doc.rect(14,y-3,182,8,'F');}
+    doc.setFont("helvetica","bold"); doc.setFontSize(8);
+    doc.setTextColor(79,70,229); doc.text(tr(MONTHS[p3.m])+" "+p3.y,16,y+2);
+    doc.setFont("helvetica","normal"); doc.setTextColor(60,60,60);
+    doc.text(String(ms2.total),50,y+2);
+    doc.setTextColor(22,163,74); doc.text(String(ms2.correct),80,y+2);
+    doc.setTextColor(220,38,38); doc.text(String(ms2.wrong),108,y+2);
+    doc.setFont("helvetica","bold");
+    doc.setTextColor(ms2.net>=0?22:220,ms2.net>=0?163:38,ms2.net>=0?74:38);
+    doc.text(String(fnet(ms2.net)),136,y+2);
+    doc.setFont("helvetica","normal"); doc.setTextColor(60,60,60);
+    doc.text(String(avgPerDay)+"/gun",155,y+2);
+    if(prevMonthNet!==null){
+      doc.setTextColor(ms2.net>=prevMonthNet?22:220,ms2.net>=prevMonthNet?163:38,ms2.net>=prevMonthNet?74:38);
+      doc.text((ms2.net>=prevMonthNet?"+":"")+delta,178,y+2);
+    } else {
+      doc.setTextColor(160,160,160); doc.text("-",178,y+2);
+    }
+    doc.setTextColor(30,30,30);
+    y+=8; prevMonthNet=ms2.net;
+  });
+
+  doc.save(tr(STUDENTS[curStudent].short).replace(/ /g,"_")+"_istatistik.pdf");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════════════════
+function sb(val,lbl,bg,c){return '<div class="sbox" style="background:'+bg+'"><div class="sval" style="color:'+c+'">'+val+'</div><div class="slbl" style="color:'+c+'">'+lbl+'</div></div>';}
+function ring(pct,c,sz){
+  var r=(sz-6)/2,ci=2*Math.PI*r,d=Math.min((pct/100)*ci,ci);
+  var valFs=sz>50?11:9, pctFs=sz>50?9:8;
+  // Split value and % symbol into two lines so both fit inside the circle
+  var valStr=String(pct);
+  return '<div style="position:relative;width:'+sz+'px;height:'+sz+'px;flex-shrink:0">'
+    +'<svg width="'+sz+'" height="'+sz+'" style="transform:rotate(-90deg)">'
+    +'<circle cx="'+(sz/2)+'" cy="'+(sz/2)+'" r="'+r+'" fill="none" stroke="#f3f4f6" stroke-width="5"/>'
+    +'<circle cx="'+(sz/2)+'" cy="'+(sz/2)+'" r="'+r+'" fill="none" stroke="'+c+'" stroke-width="5" stroke-dasharray="'+d+' '+ci+'" stroke-linecap="round"/>'
+    +'</svg>'
+    +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1">'
+    +'<span style="font-size:'+valFs+'px;font-weight:900;color:'+c+'">'+valStr+'</span>'
+    +'<span style="font-size:'+pctFs+'px;font-weight:700;color:'+c+'">%</span>'
+    +'</div></div>';
+}
+// ═══════════════════════════════════════════════════════════════════
+//  EXCEL TEMPLATE DOWNLOAD
+// ═══════════════════════════════════════════════════════════════════
+function dlTemplate(){
+  try{
+    var XLSXlib = window.XLSX;
+    if(!XLSXlib){ document.getElementById("upload-msg").innerHTML='<span style="color:#ef4444">Excel kütüphanesi yüklenmedi, lütfen sayfayı yenileyip tekrar deneyin.</span>'; return; }
+    var wb = XLSXlib.utils.book_new();
+    // ── Talimatlar sheet ──
+    var ws0data = [
+      ["Soru Takip — Veri Yükleme Şablonu"],
+      [""],
+      ["NASIL KULLANILIR?"],
+      ["1. Öğrenci sekmesini seçin", "Ömer Doruk veya Zeynep Alya sekmesine gidin"],
+      ["2. Tarih sütununa günleri girin", "Format: YYYY-AA-GG  Örnek: 2026-01-15"],
+      ["3. Her ders için Toplam ve Doğru sayısını girin", "Yanlış otomatik hesaplanır"],
+      ["4. Dosyayı kaydedin ve uygulamada Excel Yükle butonuna tıklayın"],
+      [""],
+      ["Net Formülü", "Net = Doğru - Yanlış ÷ 4"],
+      ["Başlangıç Tarihi", "2026-01-01 tarihinden önceki veriler kabul edilmez"],
+    ];
+    var ws0 = XLSXlib.utils.aoa_to_sheet(ws0data);
+    ws0["!cols"] = [{wch:44},{wch:52}];
+    XLSXlib.utils.book_append_sheet(wb, ws0, "Talimatlar");
+    // ── Öğrenci sheets ──
+    var subjNames = ["Matematik","Türkçe","Fen Bilgisi","Sosyal Bilgiler","İngilizce","Din Kültürü","Genel Deneme"];
+    var students = [{name:"Ömer Doruk Saldanlı",sheet:"Ömer Doruk"},{name:"Zeynep Alya Saldanlı",sheet:"Zeynep Alya"}];
+    students.forEach(function(st){
+      var headers1 = [""];
+      var headers2 = ["Tarih"];
+      subjNames.forEach(function(n){ headers1.push(n,""); headers2.push("Toplam","Doğru"); });
+      var rows = [headers1, headers2];
+      // 5 örnek satır
+      var examples = [
+        ["2026-01-15",20,16,15,12,10,8,12,10,8,6,5,4,0,0],
+        ["2026-01-16",25,20,0,0,12,9,0,0,10,8,0,0,0,0],
+        ["2026-01-20",30,24,20,17,0,0,0,0,12,9,0,0,0,0],
+      ];
+      examples.forEach(function(r){ rows.push(r); });
+      // 50 boş satır
+      for(var i=0;i<50;i++) rows.push(["","","","","","","","","","","","","","",""]);
+      var ws = XLSXlib.utils.aoa_to_sheet(rows);
+      ws["!cols"] = [{wch:13}];
+      for(var c=1;c<15;c++) ws["!cols"].push({wch:9});
+      XLSXlib.utils.book_append_sheet(wb, ws, st.sheet);
+    });
+    XLSXlib.writeFile(wb, "soru-takip-sablon.xlsx");
+    document.getElementById("upload-msg").innerHTML='<span style="color:#22c55e">✅ Şablon indirildi!</span>';
+    setTimeout(function(){ document.getElementById("upload-msg").innerHTML=""; },3000);
+  }catch(e){
+    document.getElementById("upload-msg").innerHTML='<span style="color:#ef4444">Hata: '+e.message+'</span>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  EXCEL UPLOAD & IMPORT
+// ═══════════════════════════════════════════════════════════════════
+var SUBJ_IDS = ["matematik","turkce","fen","sosyal","ingilizce","din","deneme"];
+// Column mapping: col index 0=date, 1=mat_total, 2=mat_correct, 3=tur_total ...
+// Each subject has 2 cols (total, correct), starting at col index 1
+
+function uploadExcel(input){
+  var file = input.files[0];
+  if(!file){ return; }
+  var msg = document.getElementById("upload-msg");
+  msg.innerHTML = '<span style="color:#f59e0b">⏳ Dosya okunuyor...</span>';
+
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      var data = new Uint8Array(e.target.result);
+      var wb = XLSX.read(data, {type:"array", cellDates:true});
+
+      // Detect which student sheet to use
+      var sheetNames = wb.SheetNames;
+      // Try to match student name in sheet name
+      var studentMap = {
+        "omer": null, "zeynep": null
+      };
+      sheetNames.forEach(function(sn){
+        var snl = sn.toLowerCase();
+        if(snl.indexOf("omer")>-1 || snl.indexOf("ömer")>-1 || snl.indexOf("doruk")>-1) studentMap["omer"] = sn;
+        if(snl.indexOf("zeynep")>-1 || snl.indexOf("alya")>-1) studentMap["zeynep"] = sn;
+      });
+
+      // Ask user which student to import for
+      var targetStudent = null;
+      var targetSheet = null;
+      if(studentMap["omer"] && studentMap["zeynep"]){
+        // Both found — ask
+        targetStudent = prompt("Hangi öğrencinin verilerini yüklemek istiyorsunuz?\n1 = Ömer Doruk\n2 = Zeynep Alya\n\nSayı girin (1 veya 2):","1");
+        if(targetStudent==="2"){ targetStudent="zeynep"; targetSheet=studentMap["zeynep"]; }
+        else { targetStudent="omer"; targetSheet=studentMap["omer"]; }
+      } else if(studentMap["omer"]){
+        targetStudent="omer"; targetSheet=studentMap["omer"];
+      } else if(studentMap["zeynep"]){
+        targetStudent="zeynep"; targetSheet=studentMap["zeynep"];
+      } else {
+        // Fallback: use second sheet (index 1)
+        targetSheet = sheetNames[1] || sheetNames[0];
+        targetStudent = prompt("Hangi öğrencinin verilerini yüklemek istiyorsunuz?\n1 = Ömer Doruk\n2 = Zeynep Alya\n\nSayı girin (1 veya 2):","1");
+        if(targetStudent==="2") targetStudent="zeynep"; else targetStudent="omer";
+      }
+
+      var ws = wb.Sheets[targetSheet];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:""});
+
+      // Find header row (row with "Tarih" or row index 2, i.e. index 2 = row 3)
+      var dataStart = -1;
+      for(var i=0;i<rows.length;i++){
+        var first = String(rows[i][0]||"").trim().toLowerCase();
+        if(first === "tarih"){ dataStart = i+1; break; }
+      }
+      if(dataStart < 0) dataStart = 3; // default: row 4 (0-indexed 3)
+
+      var imported = 0, skipped = 0;
+      var batch = {};
+
+      for(var ri=dataStart; ri<rows.length; ri++){
+        var row = rows[ri];
+        var dateRaw = String(row[0]||"").trim();
+        if(!dateRaw) continue;
+
+        // Normalize date: accept YYYY-MM-DD, DD/MM/YYYY, DD.MM.YYYY
+        var dateStr = null;
+        if(/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)){
+          dateStr = dateRaw;
+        } else if(/^\d{2}\/\d{2}\/\d{4}$/.test(dateRaw)){
+          var parts=dateRaw.split("/"); dateStr=parts[2]+"-"+parts[1]+"-"+parts[0];
+        } else if(/^\d{2}\.\d{2}\.\d{4}$/.test(dateRaw)){
+          var parts=dateRaw.split("."); dateStr=parts[2]+"-"+parts[1]+"-"+parts[0];
+        } else {
+          // Try parsing as date object string
+          var d = new Date(dateRaw);
+          if(!isNaN(d.getTime())){
+            dateStr = d.toISOString().split("T")[0];
+          }
+        }
+        if(!dateStr || dateStr < "2026-01-01"){ skipped++; continue; }
+
+        var dayData = {};
+        var hasAny = false;
+        for(var si=0; si<SUBJ_IDS.length; si++){
+          var colT = 1 + si*2;
+          var colC = 2 + si*2;
+          var t = parseInt(row[colT])||0;
+          var c2 = parseInt(row[colC])||0;
+          if(c2>t) c2=t;
+          if(t>0){
+            dayData[SUBJ_IDS[si]] = {total:t, correct:c2};
+            hasAny = true;
+          }
+        }
+        if(hasAny){ batch[dateStr] = dayData; imported++; }
+        else skipped++;
+      }
+
+      if(imported === 0){
+        msg.innerHTML = '<span style="color:#ef4444">❌ Hiç veri bulunamadı. Tarih formatını kontrol edin (YYYY-AA-GG).</span>';
+        return;
+      }
+
+      // Confirm before writing
+      var ok = confirm(
+        imported+" günlük veri bulundu.\n\nÖğrenci: "+STUDENTS[targetStudent].name+
+        "\n\nMevcut verilerle birleştirilecek (üzerine yazılmayacak).\n\nDevam edilsin mi?"
+      );
+      if(!ok){ msg.innerHTML="<span style=\"color:#aaa\">İptal edildi.</span>"; return; }
+
+      // Write to Firebase — merge (don't overwrite existing)
+      var targetRef = db.ref("records/"+targetStudent);
+      var writeCount = 0;
+      var keys = Object.keys(batch);
+      keys.forEach(function(dateKey){
+        var dayRef = targetRef.child(dateKey);
+        // Use update (merge) not set (overwrite)
+        dayRef.update(batch[dateKey]).then(function(){
+          writeCount++;
+          if(writeCount === keys.length){
+            msg.innerHTML = '<span style="color:#22c55e">✅ '+imported+' gün başarıyla yüklendi!</span>';
+            // Auto-select the student and open app
+            setTimeout(function(){ pickStudent(targetStudent); },1200);
+          }
+        }).catch(function(e){
+          msg.innerHTML = '<span style="color:#ef4444">❌ Yükleme hatası: '+e.message+'</span>';
+        });
+      });
+
+    }catch(err){
+      msg.innerHTML = '<span style="color:#ef4444">❌ Dosya okunamadı: '+err.message+'</span>';
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+
+
+// ═══════════════════════════════════════════════════════════════════
+//  LGS GERİ SAYIM + STREAK + HAFTALIK HEDEF
+// ═══════════════════════════════════════════════════════════════════
+
+var LGS_DATE = "2026-06-13"; // LGS Tarihi — buradan değiştirin
+
+function daysUntilLGS(){
+  var now = new Date(); now.setHours(0,0,0,0);
+  var lgs = new Date(LGS_DATE);
+  return Math.max(0, Math.round((lgs-now)/(1000*60*60*24)));
+}
+
+function calcStreak(){
+  var td = today();
+  var streak = 0;
+  var d = td;
+  while(true){
+    if(dstats(d).total > 0){ streak++; }
+    else if(d !== td){ break; }
+    var prev = addDays(d,-1);
+    if(prev < START) break;
+    d = prev;
+    if(d === td && dstats(d).total === 0) break;
+  }
+  // If today has no data, start from yesterday
+  if(dstats(td).total === 0){
+    streak = 0;
+    d = addDays(td,-1);
+    while(d >= START){
+      if(dstats(d).total > 0) streak++;
+      else break;
+      d = addDays(d,-1);
+    }
+  }
+  return streak;
+}
+
+function calcLongestStreak(){
+  var allDays = Object.keys(recs).filter(function(d){return d>=START&&dstats(d).total>0;}).sort();
+  if(!allDays.length) return 0;
+  var max=1, cur=1;
+  for(var i=1;i<allDays.length;i++){
+    var diff = Math.round((new Date(allDays[i])-new Date(allDays[i-1]))/(1000*60*60*24));
+    if(diff===1){ cur++; if(cur>max) max=cur; }
+    else cur=1;
+  }
+  return max;
+}
+
+// Weekly goal stored under goals[selMonth]["__weeklyTotal"]
+function getWeeklyGoal(){
+  // Store weekly goal globally, not per month
+  return (goals["__weeklyGoal"])||0;
+}
+
+function saveWeeklyGoal(val){
+  val = Math.max(0, parseInt(val)||0);
+  if(!goals["__weeklyGoal"] || goals["__weeklyGoal"]!==val){
+    goals["__weeklyGoal"] = val;
+    db.ref("goals/"+curStudent+"/__weeklyGoal").set(val);
+  }
+}
+
+// Render LGS countdown widget
+function lgsWidget(){
+  var d = daysUntilLGS();
+  var weeks = Math.floor(d/7), days = d%7;
+  var urgency = d<=30?"#ef4444":d<=60?"#f59e0b":"#4F46E5";
+  var emoji = d===0?"🎓":d<=7?"🔥":d<=30?"⚡":"📅";
+  return '<div style="background:linear-gradient(135deg,'+urgency+','+urgency+'dd);border-radius:18px;padding:14px 18px;color:white;margin-bottom:12px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 20px '+urgency+'44">'
+    +'<div style="font-size:32px">'+emoji+'</div>'
+    +'<div style="flex:1">'
+    +'<div style="font-size:10px;font-weight:800;opacity:.8;letter-spacing:1px">LGS\'YE KALAN</div>'
+    +'<div style="font-size:26px;font-weight:900;line-height:1.1">'+d+' <span style="font-size:14px;opacity:.85">gün</span></div>'
+    +(weeks>0?'<div style="font-size:11px;opacity:.8;font-weight:700">'+weeks+' hafta '+days+' gün</div>':"")
+    +'</div>'
+    +'<div style="text-align:right">'
+    +'<div style="font-size:10px;opacity:.75;font-weight:700">'+LGS_DATE.split("-").reverse().join(".")+'</div>'
+    +(d>0?'<div style="font-size:11px;opacity:.85;font-weight:800;margin-top:2px">Devam et! 💪</div>'
+      :'<div style="font-size:13px;font-weight:900;margin-top:2px">Başarılar! 🎓</div>')
+    +'</div></div>';
+}
+
+// Streak widget
+function streakWidget(){
+  var s=calcStreak(), ls=calcLongestStreak();
+  var fire = s>=7?"🔥":s>=3?"⚡":"📖";
+  return '<div style="background:white;border-radius:14px;padding:11px 14px;margin-bottom:12px;box-shadow:0 2px 8px #0001;display:flex;align-items:center;gap:10px">'
+    +'<div style="font-size:28px">'+fire+'</div>'
+    +'<div style="flex:1">'
+    +'<div style="font-size:11px;color:#888;font-weight:700">Çalışma Serisi</div>'
+    +'<div style="font-size:20px;font-weight:900;color:'+(s>=3?"#f59e0b":"#4F46E5")+'">'+s+' <span style="font-size:12px">gün üst üste</span></div>'
+    +'</div>'
+    +'<div style="text-align:right">'
+    +'<div style="font-size:10px;color:#aaa;font-weight:700">En uzun seri</div>'
+    +'<div style="font-size:16px;font-weight:900;color:#22c55e">'+ls+' <span style="font-size:10px">gün</span></div>'
+    +'</div></div>';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  COMPARISON MODE (readonly: shows both students)
+// ═══════════════════════════════════════════════════════════════════
+
+var cmpRecs = {};   // other student recs
+var cmpGoals = {};
+var cmpRef = null;
+
+function loadComparison(callback){
+  var other = curStudent==="omer"?"zeynep":"omer";
+  if(cmpRef) cmpRef.off();
+  cmpRef = db.ref("records/"+other);
+  cmpRef.once("value", function(snap){
+    cmpRecs = snap.val()||{};
+    if(callback) callback();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADMIN COMPARISON — SHARED HELPERS
+// ═══════════════════════════════════════════════════════════════════
+var MONTHS_TR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+
+function cmpMPrev(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i>0){selMonth=ms[i-1];renderCmpMonthly();}}
+function cmpMNext(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i<ms.length-1){selMonth=ms[i+1];renderCmpMonthly();}}
+
+// Stats from an arbitrary recs object
+function stFrom(r,d){
+  var t=0,c=0,w=0;
+  SUBJ.forEach(function(s){var sr=(r[d]&&r[d][s.id])||{};t+=sr.total||0;c+=sr.correct||0;w+=cw(sr.total||0,sr.correct||0);});
+  return {total:t,correct:c,wrong:w,net:calcNet(c,w)};
+}
+function mstFrom(r,ymStr,sid){
+  var p=parseYM(ymStr),t=0,c=0,w=0;
+  for(var d=1;d<=dim(p.y,p.m);d++){
+    var key=ds(p.y,p.m,d),rec=r[key]; if(!rec)continue;
+    var list=sid?[SUBJ.find(function(s){return s.id===sid;})]:SUBJ;
+    list.forEach(function(s){if(!s)return;var sr=rec[s.id]||{};t+=sr.total||0;c+=sr.correct||0;w+=cw(sr.total||0,sr.correct||0);});
+  }
+  return {total:t,correct:c,wrong:w,net:calcNet(c,w)};
+}
+function wstFrom(r,ws,sid){
+  var days=weekDays(ws),t=0,c=0,w=0;
+  days.forEach(function(d){
+    var rec=r[d]||{};
+    var list=sid?[SUBJ.find(function(s){return s.id===sid;})]:SUBJ;
+    list.forEach(function(s){if(!s)return;var sr=rec[s.id]||{};t+=sr.total||0;c+=sr.correct||0;w+=cw(sr.total||0,sr.correct||0);});
+  });
+  return {total:t,correct:c,wrong:w,net:calcNet(c,w)};
+}
+function allFrom(r){
+  var allDays=Object.keys(r).filter(function(d){return d>=START;});
+  var t=0,c=0,w=0;
+  allDays.forEach(function(d){var s=stFrom(r,d);t+=s.total;c+=s.correct;w+=s.wrong;});
+  return {total:t,correct:c,wrong:w,net:calcNet(c,w),days:allDays.filter(function(d){return stFrom(r,d).total>0;}).length};
+}
+
+function adminHeader(title,sub){
+  return '<div style="background:linear-gradient(135deg,#d97706,#b45309);border-radius:18px;padding:12px 16px;color:white;margin-bottom:12px;display:flex;align-items:center;gap:12px">'
+    +'<div style="font-size:28px">👑</div>'
+    +'<div><div style="font-size:10px;opacity:.8;font-weight:700;letter-spacing:1px">YÖNETİCİ PANELİ</div>'
+    +'<div style="font-size:15px;font-weight:900">'+title+'</div>'
+    +(sub?'<div style="font-size:10px;opacity:.75">'+sub+'</div>':"")
+    +'</div></div>';
+}
+
+function sideBySide(oSt,zSt){
+  var ost=STUDENTS["omer"],zst=STUDENTS["zeynep"];
+  var oAp=oSt.total>0?parseFloat((oSt.correct/oSt.total*100).toFixed(2)):0;
+  var zAp=zSt.total>0?parseFloat((zSt.correct/zSt.total*100).toFixed(2)):0;
+  function card(st,stats,ap,bg,tc){
+    return '<div style="border-radius:14px;overflow:hidden;box-shadow:0 2px 10px #0001">'
+      +'<div style="background:'+st.grad+';padding:10px;color:white;text-align:center">'
+      +'<div style="font-size:24px">'+st.emoji+'</div>'
+      +'<div style="font-size:11px;font-weight:900">'+st.short+'</div>'
+      +'</div>'
+      +'<div style="padding:10px;background:white;text-align:center">'
+      +'<div style="font-size:24px;font-weight:900;color:#222">'+stats.total+'</div>'
+      +'<div style="font-size:9px;color:#aaa;font-weight:700;margin-bottom:4px">soru</div>'
+      +'<div style="display:flex;justify-content:center;gap:6px;font-size:10px;font-weight:800;margin-bottom:3px">'
+      +'<span style="color:#22c55e">✓'+stats.correct+'</span>'
+      +'<span style="color:#ef4444">✗'+stats.wrong+'</span>'
+      +'</div>'
+      +(stats.total>0?'<div style="font-size:10px;font-weight:700;color:#888;margin-bottom:3px">%'+ap+' doğru</div>':"")
+      +'<div style="font-size:14px;font-weight:900;color:'+(stats.net>=0?"#22c55e":"#ef4444")+'">'+fnet(stats.net)+' net</div>'
+      +'</div></div>';
+  }
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
+    +card(ost,oSt,oAp)+card(zst,zSt,zAp)+'</div>';
+}
+
+function subjTable(oRecs,zRecs,label,getStat){
+  var ost=STUDENTS["omer"],zst=STUDENTS["zeynep"];
+  var html='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:10px">'+label+'</div>';
+  var any=false;
+  SUBJ.forEach(function(s){
+    var oS=getStat(oRecs,s.id),zS=getStat(zRecs,s.id);
+    if(!oS.total&&!zS.total)return;
+    any=true;
+    var oPct=oS.total>0?parseFloat((oS.correct/oS.total*100).toFixed(2)):0;
+    var zPct=zS.total>0?parseFloat((zS.correct/zS.total*100).toFixed(2)):0;
+    html+='<div style="padding:9px 0;border-bottom:1px solid #f3f4f6">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'
+      +'<span style="font-size:18px">'+s.e+'</span>'
+      +'<span style="font-size:12px;font-weight:900;color:#333;flex:1">'+s.n+'</span>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
+      +'<div style="background:#EEF2FF;border-radius:8px;padding:6px 8px">'
+      +'<div style="font-size:9px;font-weight:800;color:#4F46E5;margin-bottom:2px">'+ost.emoji+' '+ost.short+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:#555">'+oS.total+' soru · %'+oPct+'</div>'
+      +'<div style="font-size:13px;font-weight:900;color:'+(oS.net>=0?"#22c55e":"#ef4444")+'">'+fnet(oS.net)+' net</div>'
+      +'</div>'
+      +'<div style="background:#FDF2F8;border-radius:8px;padding:6px 8px">'
+      +'<div style="font-size:9px;font-weight:800;color:#DB2777;margin-bottom:2px">'+zst.emoji+' '+zst.short+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:#555">'+zS.total+' soru · %'+zPct+'</div>'
+      +'<div style="font-size:13px;font-weight:900;color:'+(zS.net>=0?"#22c55e":"#ef4444")+'">'+fnet(zS.net)+' net</div>'
+      +'</div></div></div>';
+  });
+  if(!any) html+='<div class="empty" style="padding:16px">Henüz veri yok</div>';
+  html+='</div>';
+  return html;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADMIN VIEW 1 — GÜNLÜK
+// ═══════════════════════════════════════════════════════════════════
+function renderCmpDaily(){
+  var td=today();
+  var oTd=stFrom(recs,selDate), zTd=stFrom(cmpRecs,selDate);
+  var p=parseYM(selDate.slice(0,7));
+
+  // Calendar
+  var calDays=dim(p.y,p.m);
+  var fdow=new Date(p.y,p.m,1).getDay();
+  var cells="";
+  for(var i=0;i<fdow;i++) cells+="<div></div>";
+  for(var d2=1;d2<=calDays;d2++){
+    var dstr=ds(p.y,p.m,d2);
+    var oS=stFrom(recs,dstr).total>0, zS=stFrom(cmpRecs,dstr).total>0;
+    var isSel=dstr===selDate, isTd=dstr===td, isOff=dstr>td||dstr<START;
+    var cls="cday"+(isSel?" sel":isTd?" tdy":isOff?" off":"");
+    var dot=oS&&zS?"●":oS?"◐":zS?"◑":"";
+    cells+='<div style="position:relative">'
+      +'<button class="'+cls+'"'+(isOff?"":" onclick=\"selCmpDay('"+dstr+"')\"")+'>'
+      +d2+'</button>'
+      +(dot?'<div style="position:absolute;bottom:1px;left:50%;transform:translateX(-50%);font-size:6px;color:'+(isSel?"white":"var(--p)")+'">'+dot+'</div>':"")
+      +'</div>';
+  }
+
+  var html=adminHeader("Günlük Karşılaştırma","Bugün: "+td.split("-").reverse().join("."))
+    +'<div class="period-nav">'
+    +'<button onclick="cmpCalPrev()">‹</button>'
+    +'<span>'+MONTHS_TR[p.m]+' '+p.y+'</span>'
+    +'<button onclick="cmpCalNext()">›</button></div>'
+    +'<div class="cal" style="margin-bottom:10px">'
+    +'<div class="cal-hdr">'+["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"].map(function(d){return'<div>'+d+'</div>';}).join("")+'</div>'
+    +'<div class="cal-grid">'+cells+'</div></div>'
+    +'<div style="background:white;border-radius:12px;padding:8px 14px;margin-bottom:10px;box-shadow:0 2px 8px #0001;font-size:12px;font-weight:800;color:#888">'
+    +'Seçili: '+selDate.split("-").reverse().join(".")
+    +(selDate===td?' <span style="color:var(--p)">● Bugün</span>':"")
+    +'</div>';
+
+  html+=sideBySide(oTd,zTd);
+  html+=subjTable(recs,cmpRecs,"📚 Ders Bazında",function(r,sid){
+    var sr=(r[selDate]&&r[selDate][sid])||{total:0,correct:0};
+    var w=cw(sr.total||0,sr.correct||0);
+    return {total:sr.total||0,correct:sr.correct||0,wrong:w,net:calcNet(sr.correct||0,w)};
+  });
+  document.getElementById("vw").innerHTML=html;
+}
+
+function selCmpDay(d){ selDate=d; renderCmpDaily(); }
+function cmpCalPrev(){
+  var p=parseYM(selDate.slice(0,7)),nm=p.m-1,ny=p.y;
+  if(nm<0){nm=11;ny--;}
+  if(ds(ny,nm,1)<START)return;
+  selDate=ds(ny,nm,1); renderCmpDaily();
+}
+function cmpCalNext(){
+  var p=parseYM(selDate.slice(0,7)),nm=p.m+1,ny=p.y;
+  if(nm>11){nm=0;ny++;}
+  var now=new Date();
+  if(ny>now.getFullYear()||(ny===now.getFullYear()&&nm>now.getMonth()))return;
+  selDate=ds(ny,nm,1); renderCmpDaily();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADMIN VIEW 2 — HAFTALIK
+// ═══════════════════════════════════════════════════════════════════
+function renderCmpWeekly(){
+  var days=weekDays(selWeekStart);
+  var oW=wstFrom(recs,selWeekStart), zW=wstFrom(cmpRecs,selWeekStart);
+  var label=fmtD(selWeekStart)+" – "+fmtD(days[6]);
+  var dnames=["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"];
+
+  var html=adminHeader("Haftalık Karşılaştırma",label)
+    +'<div class="period-nav">'
+    +'<button onclick="cmpWkPrev()">‹</button>'
+    +'<span style="font-size:13px">'+label+'</span>'
+    +'<button onclick="cmpWkNext()">›</button></div>';
+
+  html+=sideBySide(oW,zW);
+
+  // Daily breakdown for week
+  html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:8px">Günlük Detay</div>';
+  days.forEach(function(d,i){
+    var oD=stFrom(recs,d), zD=stFrom(cmpRecs,d);
+    var isTd=d===today(), isOff=d>today()||d<START;
+    html+='<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f3f4f6'+(isOff?";opacity:.4":"")+(d===selDate?";background:#f8f8ff":"")+'">'
+      +'<div style="min-width:40px;text-align:center">'
+      +'<div style="font-size:9px;font-weight:800;color:#aaa">'+dnames[i]+'</div>'
+      +'<div style="font-size:14px;font-weight:900;color:'+(isTd?"var(--p)":"#333")+'">'+parseInt(d.split("-")[2])+'</div>'
+      +'</div>'
+      +'<div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:6px">'
+      +'<div style="background:#EEF2FF;border-radius:7px;padding:4px 7px;text-align:center">'
+      +'<div style="font-size:9px;font-weight:800;color:#4F46E5">👦</div>'
+      +(oD.total?'<div style="font-size:12px;font-weight:900;color:'+(oD.net>=0?"#22c55e":"#ef4444")+'">'+fnet(oD.net)+'</div><div style="font-size:9px;color:#888">'+oD.total+'s</div>'
+        :'<div style="font-size:9px;color:#ccc">—</div>')
+      +'</div>'
+      +'<div style="background:#FDF2F8;border-radius:7px;padding:4px 7px;text-align:center">'
+      +'<div style="font-size:9px;font-weight:800;color:#DB2777">👧</div>'
+      +(zD.total?'<div style="font-size:12px;font-weight:900;color:'+(zD.net>=0?"#22c55e":"#ef4444")+'">'+fnet(zD.net)+'</div><div style="font-size:9px;color:#888">'+zD.total+'s</div>'
+        :'<div style="font-size:9px;color:#ccc">—</div>')
+      +'</div></div></div>';
+  });
+  html+='</div>';
+  html+=subjTable(recs,cmpRecs,"📚 Haftalık Ders Bazında",function(r,sid){
+    return wstFrom(r,selWeekStart,sid);
+  });
+  document.getElementById("vw").innerHTML=html;
+}
+function cmpWkPrev(){var p=addDays(selWeekStart,-7);if(p<START)return;selWeekStart=p;renderCmpWeekly();}
+function cmpWkNext(){var n=addDays(selWeekStart,7),td=today();if(n>weekStart(td))return;selWeekStart=n;renderCmpWeekly();}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADMIN VIEW 3 — AYLIK
+// ═══════════════════════════════════════════════════════════════════
+function renderCmpMonthly(){
+  var pm=parseYM(selMonth);
+  var oM=mstFrom(recs,selMonth), zM=mstFrom(cmpRecs,selMonth);
+
+  var html=adminHeader("Aylık Karşılaştırma",MONTHS_TR[pm.m]+" "+pm.y)
+    +'<div class="period-nav">'
+    +'<button onclick="cmpMPrev()">‹</button>'
+    +'<span>'+MONTHS_TR[pm.m]+' '+pm.y+'</span>'
+    +'<button onclick="cmpMNext()">›</button></div>';
+
+  html+=sideBySide(oM,zM);
+  html+=subjTable(recs,cmpRecs,"📚 Aylık Ders Bazında",function(r,sid){
+    return mstFrom(r,selMonth,sid);
+  });
+
+  // Active days per student
+  var oDays=Object.keys(recs).filter(function(d){return d.startsWith(selMonth)&&stFrom(recs,d).total>0;}).length;
+  var zDays=Object.keys(cmpRecs).filter(function(d){return d.startsWith(selMonth)&&stFrom(cmpRecs,d).total>0;}).length;
+  html+='<div class="card"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    +'<div style="text-align:center"><div style="font-size:11px;color:#888;font-weight:700;margin-bottom:4px">👦 Aktif Gün</div><div style="font-size:26px;font-weight:900;color:#4F46E5">'+oDays+'</div></div>'
+    +'<div style="text-align:center"><div style="font-size:11px;color:#888;font-weight:700;margin-bottom:4px">👧 Aktif Gün</div><div style="font-size:26px;font-weight:900;color:#DB2777">'+zDays+'</div></div>'
+    +'</div></div>';
+
+  document.getElementById("vw").innerHTML=html;
+}
+function cmpMPrev(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i>0){selMonth=ms[i-1];renderCmpMonthly();}}
+function cmpMNext(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i<ms.length-1){selMonth=ms[i+1];renderCmpMonthly();}}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADMIN VIEW 4 — GENEL (TÜM ZAMANLAR)
+// ═══════════════════════════════════════════════════════════════════
+function renderCmpAll(){
+  var oAll=allFrom(recs), zAll=allFrom(cmpRecs);
+
+  var html=adminHeader("Genel Karşılaştırma","Tüm zamanlar · 1 Ocak 2026\'dan itibaren");
+  html+=sideBySide(oAll,zAll);
+
+  // Active days
+  html+='<div class="sgrid2" style="margin-bottom:12px">'
+    +'<div style="background:#EEF2FF;border-radius:14px;padding:14px;text-align:center"><div style="font-size:11px;color:#4F46E5;font-weight:700">👦 Aktif Gün</div><div style="font-size:28px;font-weight:900;color:#4F46E5">'+oAll.days+'</div></div>'
+    +'<div style="background:#FDF2F8;border-radius:14px;padding:14px;text-align:center"><div style="font-size:11px;color:#DB2777;font-weight:700">👧 Aktif Gün</div><div style="font-size:28px;font-weight:900;color:#DB2777">'+zAll.days+'</div></div>'
+    +'</div>';
+
+  // Monthly trend table
+  html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:8px">📈 Aylık Net Karşılaştırması</div>';
+  html+='<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;font-size:10px;font-weight:800;color:#aaa;padding:0 0 6px;border-bottom:2px solid #f3f4f6">'
+    +'<div>Ay</div><div style="text-align:center">👦</div><div style="text-align:center">👧</div></div>';
+  availMonths().forEach(function(ymStr){
+    var oM2=mstFrom(recs,ymStr), zM2=mstFrom(cmpRecs,ymStr);
+    if(!oM2.total&&!zM2.total)return;
+    var p2=parseYM(ymStr);
+    html+='<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;padding:7px 0;border-bottom:1px solid #f3f4f6;align-items:center">'
+      +'<div style="font-size:11px;font-weight:800;color:var(--p);min-width:60px">'+MONTHS_TR[p2.m].substring(0,3)+'</div>'
+      +'<div style="text-align:center">'
+      +(oM2.total?'<div style="font-size:12px;font-weight:900;color:'+(oM2.net>=0?"#22c55e":"#ef4444")+'">'+fnet(oM2.net)+'</div><div style="font-size:9px;color:#aaa">'+oM2.total+'s</div>'
+        :'<div style="font-size:10px;color:#ddd">—</div>')
+      +'</div>'
+      +'<div style="text-align:center">'
+      +(zM2.total?'<div style="font-size:12px;font-weight:900;color:'+(zM2.net>=0?"#22c55e":"#ef4444")+'">'+fnet(zM2.net)+'</div><div style="font-size:9px;color:#aaa">'+zM2.total+'s</div>'
+        :'<div style="font-size:10px;color:#ddd">—</div>')
+      +'</div></div>';
+  });
+  html+='</div>';
+  document.getElementById("vw").innerHTML=html;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADMIN VIEW 5 — DERS BAZINDA
+// ═══════════════════════════════════════════════════════════════════
+function renderCmpSubj(){
+  var html=adminHeader("Ders Bazında Karşılaştırma","Tüm dersler · Tüm zamanlar");
+
+  // Per-subject full stats
+  SUBJ.forEach(function(s){
+    var oAll=allFromSid(recs,s.id), zAll=allFromSid(cmpRecs,s.id);
+    if(!oAll.total&&!zAll.total)return;
+    var oPct=oAll.total>0?parseFloat((oAll.correct/oAll.total*100).toFixed(2)):0;
+    var zPct=zAll.total>0?parseFloat((zAll.correct/zAll.total*100).toFixed(2)):0;
+    html+='<div class="card" style="margin-bottom:10px;border-top:3px solid '+s.c+'">'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
+      +'<div style="width:38px;height:38px;border-radius:11px;background:'+s.li+';display:flex;align-items:center;justify-content:center;font-size:20px">'+s.e+'</div>'
+      +'<div style="font-weight:900;font-size:15px;color:#222">'+s.n+'</div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+      +'<div style="background:#EEF2FF;border-radius:12px;padding:12px;text-align:center">'
+      +'<div style="font-size:11px;font-weight:800;color:#4F46E5;margin-bottom:6px">👦 Ömer Doruk</div>'
+      +'<div style="font-size:22px;font-weight:900;color:#222">'+oAll.total+'</div>'
+      +'<div style="font-size:10px;color:#aaa;margin-bottom:4px">soru</div>'
+      +'<div style="display:flex;justify-content:center;gap:6px;font-size:10px;font-weight:800">'
+      +'<span style="color:#22c55e">✓'+oAll.correct+'</span><span style="color:#ef4444">✗'+oAll.wrong+'</span></div>'
+      +(oAll.total?'<div style="font-size:10px;color:#888;font-weight:700;margin:3px 0">%'+oPct+' doğru</div>':"")
+      +'<div style="font-size:15px;font-weight:900;color:'+(oAll.net>=0?"#22c55e":"#ef4444")+'">'+fnet(oAll.net)+' net</div>'
+      +ring(oPct,"#4F46E5",52)
+      +'</div>'
+      +'<div style="background:#FDF2F8;border-radius:12px;padding:12px;text-align:center">'
+      +'<div style="font-size:11px;font-weight:800;color:#DB2777;margin-bottom:6px">👧 Zeynep Alya</div>'
+      +'<div style="font-size:22px;font-weight:900;color:#222">'+zAll.total+'</div>'
+      +'<div style="font-size:10px;color:#aaa;margin-bottom:4px">soru</div>'
+      +'<div style="display:flex;justify-content:center;gap:6px;font-size:10px;font-weight:800">'
+      +'<span style="color:#22c55e">✓'+zAll.correct+'</span><span style="color:#ef4444">✗'+zAll.wrong+'</span></div>'
+      +(zAll.total?'<div style="font-size:10px;color:#888;font-weight:700;margin:3px 0">%'+zPct+' doğru</div>':"")
+      +'<div style="font-size:15px;font-weight:900;color:'+(zAll.net>=0?"#22c55e":"#ef4444")+'">'+fnet(zAll.net)+' net</div>'
+      +ring(zPct,"#DB2777",52)
+      +'</div></div>'
+      // Monthly breakdown for this subject
+      +'<div style="margin-top:12px"><div style="font-size:10px;font-weight:800;color:#aaa;margin-bottom:6px">AYLIK NET</div>'
+      +'<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:3px;font-size:10px">';
+    availMonths().forEach(function(ymStr){
+      var oM=mstFrom(recs,ymStr,s.id), zM=mstFrom(cmpRecs,ymStr,s.id);
+      if(!oM.total&&!zM.total)return;
+      var p3=parseYM(ymStr);
+      html+='<div style="color:#888;font-weight:700;padding:3px 0;border-bottom:1px solid #f3f4f6">'+MONTHS_TR[p3.m].substring(0,3)+'</div>'
+        +'<div style="text-align:center;padding:3px 0;border-bottom:1px solid #f3f4f6;font-weight:900;color:'+(oM.net>=0?"#22c55e":"#ef4444")+'">'+(oM.total?fnet(oM.net):"—")+'</div>'
+        +'<div style="text-align:center;padding:3px 0;border-bottom:1px solid #f3f4f6;font-weight:900;color:'+(zM.net>=0?"#22c55e":"#ef4444")+'">'+(zM.total?fnet(zM.net):"—")+'</div>';
+    });
+    html+='</div></div></div>';
+  });
+  document.getElementById("vw").innerHTML=html;
+}
+
+function allFromSid(r,sid){
+  var allDays=Object.keys(r).filter(function(d){return d>=START;});
+  var t=0,c=0;
+  allDays.forEach(function(d){var sr=(r[d]&&r[d][sid])||{};t+=sr.total||0;c+=sr.correct||0;});
+  var w=cw(t,c);
+  return {total:t,correct:c,wrong:w,net:calcNet(c,w)};
+}
+
+function renderComparison(){ renderCmpDaily(); }
+function cmpCard(){}  // legacy stub
+function bigCmpCard(){ return ""; } // legacy stub
+
+
+
+// ═══════════════════════════════════════════════════════════════════
+//  PROFİL RESMİ (Firebase Realtime DB'de base64 saklanır)
+// ═══════════════════════════════════════════════════════════════════
+var _avatarPendingData = null; // base64 string waiting to save
+
+function loadProfilePicsForPicker(){
+  if(!db) return;
+  ["omer","zeynep"].forEach(function(sid){
+    db.ref("profiles/"+sid+"/avatar").once("value",function(snap){
+      var b64=snap.val(); PROFILE_PICS[sid]=b64||null; applyAvatar(sid,b64);
+    });
+  });
+}
+
+function loadProfilePics(){
+  if(!db||!curStudent) return;
+  ["omer","zeynep"].forEach(function(sid){
+    db.ref("profiles/"+sid+"/avatar").once("value",function(snap){
+      var b64 = snap.val();
+      PROFILE_PICS[sid] = b64||null;
+      applyAvatar(sid, b64);
+    });
+  });
+}
+
+function applyAvatar(sid, b64){
+  var st = STUDENTS[sid];
+  // picker button avatar
+  var pickEl = document.getElementById("pick-avatar-"+sid);
+  if(pickEl){
+    if(b64){ pickEl.style.backgroundImage="url('"+b64+"')"; pickEl.style.backgroundSize="cover"; pickEl.textContent=""; }
+    else    { pickEl.style.backgroundImage="none"; pickEl.textContent=st.emoji; }
+  }
+  // teacher modal avatar
+  var tmEl = document.getElementById("tm-avatar-"+sid);
+  if(tmEl){
+    if(b64){ tmEl.style.backgroundImage="url('"+b64+"')"; tmEl.style.backgroundSize="cover"; tmEl.textContent=""; }
+    else    { tmEl.style.backgroundImage="none"; tmEl.textContent=st.emoji; }
+  }
+  // header avatar (only if current student)
+  if(sid===curStudent){
+    var hEl = document.getElementById("hdr-avatar");
+    if(hEl){
+      if(b64){ hEl.style.backgroundImage="url('"+b64+"')"; hEl.style.backgroundSize="cover"; hEl.textContent=""; }
+      else    { hEl.style.backgroundImage="none"; hEl.textContent=st.emoji; }
+    }
+  }
+}
+
+function openAvatarModal(){
+  if(!curStudent||curStudent==="admin"||READONLY||_teacherMode) return;
+  _avatarPendingData = null;
+  var prev = PROFILE_PICS[curStudent];
+  var previewEl = document.getElementById("avatar-preview");
+  if(prev){ previewEl.style.backgroundImage="url('"+prev+"')"; previewEl.style.backgroundSize="cover"; previewEl.textContent=""; }
+  else     { previewEl.style.backgroundImage="none"; previewEl.textContent=STUDENTS[curStudent].emoji; }
+  document.getElementById("avatar-modal").style.display="flex";
+}
+
+function closeAvatarModal(){
+  document.getElementById("avatar-modal").style.display="none";
+  _avatarPendingData=null;
+}
+
+function previewAvatar(input){
+  var file=input.files[0]; if(!file) return;
+  // Resize to max 200px to keep Firebase storage small
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      var canvas=document.createElement("canvas");
+      var maxSz=200;
+      var ratio=Math.min(maxSz/img.width,maxSz/img.height,1);
+      canvas.width=img.width*ratio; canvas.height=img.height*ratio;
+      canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+      _avatarPendingData=canvas.toDataURL("image/jpeg",0.82);
+      var prev=document.getElementById("avatar-preview");
+      prev.style.backgroundImage="url('"+_avatarPendingData+"')";
+      prev.style.backgroundSize="cover"; prev.textContent="";
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function saveAvatar(){
+  if(!_avatarPendingData||!curStudent){ closeAvatarModal(); return; }
+  var btn=document.getElementById("avatar-save-btn");
+  btn.textContent="⏳ Kaydediliyor..."; btn.disabled=true;
+  db.ref("profiles/"+curStudent+"/avatar").set(_avatarPendingData)
+    .then(function(){
+      PROFILE_PICS[curStudent]=_avatarPendingData;
+      applyAvatar(curStudent,_avatarPendingData);
+      closeAvatarModal();
+      btn.textContent="💾 Kaydet"; btn.disabled=false;
+    })
+    .catch(function(e){ alert("Kayıt hatası: "+e.message); btn.textContent="💾 Kaydet"; btn.disabled=false; });
+}
+
+function removeAvatar(){
+  if(!curStudent) return;
+  db.ref("profiles/"+curStudent+"/avatar").remove()
+    .then(function(){
+      PROFILE_PICS[curStudent]=null;
+      applyAvatar(curStudent,null);
+      closeAvatarModal();
+    });
+}
+// ── ŞİFRE MODAL FONKSİYONLARI ──────────────────────────────────────
+var _pwTarget = null;
+
+function askPassword(sid){
+  if(READONLY){ pickStudent(sid); return; }
+  // Teacher: no password, show student picker modal
+  if(sid==="teacher"){
+    document.getElementById("teacher-modal").style.display="flex";
+    return;
+  }
+  _pwTarget = sid;
+  var st = STUDENTS[sid];
+  var avatarEl = document.getElementById("pw-avatar");
+  if(st.emoji){ avatarEl.textContent = st.emoji; avatarEl.style.backgroundImage="none"; avatarEl.style.fontSize="40px"; }
+  document.getElementById("pw-name").textContent = st.name;
+  document.getElementById("pw-input").value = "";
+  document.getElementById("pw-err").textContent = "";
+  var btn = document.getElementById("pw-btn");
+  var grads = {omer:"linear-gradient(135deg,#4F46E5,#7C3AED)",zeynep:"linear-gradient(135deg,#DB2777,#9D174D)",admin:"linear-gradient(135deg,#d97706,#b45309)"};
+  btn.style.background = grads[sid]||grads.omer;
+  var inp = document.getElementById("pw-input");
+  inp.style.borderColor = "#e5e7eb";
+  inp.type = "password";
+  document.getElementById("pw-modal").style.display = "flex";
+  setTimeout(function(){ inp.focus(); }, 120);
+}
+
+function closeTeacherModal(){
+  document.getElementById("teacher-modal").style.display="none";
+}
+
+function teacherPick(sid){
+  document.getElementById("teacher-modal").style.display="none";
+  // Teacher enters as readonly for the chosen student
+  _teacherMode = true;
+  pickStudent(sid);
+}
+var _teacherMode = false;
+
+function closePwModal(){
+  document.getElementById("pw-modal").style.display = "none";
+  _pwTarget = null;
+}
+
+function pwErr(show, msg){
+  var inp = document.getElementById("pw-input");
+  var err = document.getElementById("pw-err");
+  if(show){
+    err.textContent = msg || "Yanlış şifre, tekrar deneyin.";
+    inp.style.borderColor = "#ef4444";
+    inp.value = "";
+    setTimeout(function(){ inp.focus(); }, 50);
+  } else {
+    err.textContent = "";
+    inp.style.borderColor = "#e5e7eb";
+  }
+}
+
+function togglePwVis(){
+  var inp = document.getElementById("pw-input");
+  inp.type = inp.type === "password" ? "text" : "password";
+}
+
+function pwSubmit(){
+  if(!_pwTarget) return;
+  var val = document.getElementById("pw-input").value;
+  if(val === PASSWORDS[_pwTarget]){
+    document.getElementById("pw-modal").style.display = "none";
+    pickStudent(_pwTarget);
+  } else {
+    pwErr(true);
+  }
+}
+
+// Close on backdrop click
+document.addEventListener("click", function(e){
+  var modal = document.getElementById("pw-modal");
+  if(e.target === modal) closePwModal();
+});
+</script>
+
+<!-- ── ŞİFRE MODAL ── -->
+<div id="pw-modal" style="display:none;position:fixed;inset:0;background:#0007;z-index:999;align-items:center;justify-content:center;padding:20px">
+  <div style="background:white;border-radius:24px;padding:32px 28px;max-width:340px;width:100%;box-shadow:0 20px 60px #0004;text-align:center">
+    <div id="pw-avatar" style="font-size:40px;margin-bottom:12px">👤</div>
+    <div id="pw-name" style="font-size:17px;font-weight:900;color:#222;margin-bottom:4px"></div>
+    <div style="font-size:12px;color:#aaa;font-weight:600;margin-bottom:22px">Şifrenizi girin</div>
+    <div style="position:relative;margin-bottom:10px">
+      <input id="pw-input" type="password" placeholder="••••••"
+        style="width:100%;padding:14px 46px 14px 16px;border-radius:14px;border:2px solid #e5e7eb;font-size:18px;font-weight:900;letter-spacing:4px;text-align:center;outline:none;font-family:Nunito,sans-serif;transition:border .2s"
+        oninput="pwErr(false)" onkeydown="if(event.key==='Enter')pwSubmit()"/>
+      <button onclick="togglePwVis()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;cursor:pointer;color:#aaa" id="pw-eye">👁</button>
+    </div>
+    <div id="pw-err" style="font-size:12px;font-weight:800;color:#ef4444;margin-bottom:12px;min-height:18px"></div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closePwModal()" style="flex:1;padding:12px;border-radius:12px;border:2px solid #e5e7eb;background:white;font-size:13px;font-weight:800;color:#888;font-family:Nunito,sans-serif;cursor:pointer">İptal</button>
+      <button onclick="pwSubmit()" id="pw-btn" style="flex:2;padding:12px;border-radius:12px;border:none;background:linear-gradient(135deg,#4F46E5,#7C3AED);color:white;font-size:14px;font-weight:900;font-family:Nunito,sans-serif;cursor:pointer">Giriş Yap →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ÖĞRETMEN ÖĞRENCİ SEÇİCİ ── -->
+<div id="teacher-modal" style="display:none;position:fixed;inset:0;background:#0007;z-index:998;align-items:center;justify-content:center;padding:20px">
+  <div style="background:white;border-radius:24px;padding:28px;max-width:340px;width:100%;box-shadow:0 20px 60px #0004;text-align:center">
+    <div style="font-size:36px;margin-bottom:10px">👩‍🏫</div>
+    <div style="font-size:16px;font-weight:900;color:#222;margin-bottom:4px">Öğretmen Girişi</div>
+    <div style="font-size:12px;color:#aaa;font-weight:600;margin-bottom:22px">Hangi öğrenciyi görüntülemek istiyorsunuz?</div>
+    <button onclick="teacherPick('omer')" style="width:100%;padding:14px 16px;border-radius:14px;border:2px solid #e5e7eb;background:white;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer;font-family:Nunito,sans-serif;transition:all .2s" onmouseover="this.style.borderColor='#4F46E5'" onmouseout="this.style.borderColor='#e5e7eb'">
+      <div id="tm-avatar-omer" style="width:44px;height:44px;border-radius:12px;background:#EEF2FF;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;overflow:hidden">👦</div>
+      <div style="text-align:left"><b style="display:block;font-size:14px;font-weight:900;color:#222">Ömer Doruk Saldanlı</b><span style="font-size:11px;color:#aaa;font-weight:600">Öğrenci</span></div>
+    </button>
+    <button onclick="teacherPick('zeynep')" style="width:100%;padding:14px 16px;border-radius:14px;border:2px solid #e5e7eb;background:white;margin-bottom:18px;display:flex;align-items:center;gap:12px;cursor:pointer;font-family:Nunito,sans-serif;transition:all .2s" onmouseover="this.style.borderColor='#DB2777'" onmouseout="this.style.borderColor='#e5e7eb'">
+      <div id="tm-avatar-zeynep" style="width:44px;height:44px;border-radius:12px;background:#FDF2F8;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;overflow:hidden">👧</div>
+      <div style="text-align:left"><b style="display:block;font-size:14px;font-weight:900;color:#222">Zeynep Alya Saldanlı</b><span style="font-size:11px;color:#aaa;font-weight:600">Öğrenci</span></div>
+    </button>
+    <button onclick="closeTeacherModal()" style="width:100%;padding:10px;border-radius:12px;border:2px solid #e5e7eb;background:white;font-size:13px;font-weight:800;color:#888;cursor:pointer;font-family:Nunito,sans-serif">İptal</button>
+  </div>
+</div>
+
+<!-- ── PROFİL RESMİ YÜKLEME MODAL ── -->
+<div id="avatar-modal" style="display:none;position:fixed;inset:0;background:#0007;z-index:997;align-items:center;justify-content:center;padding:20px">
+  <div style="background:white;border-radius:24px;padding:28px;max-width:320px;width:100%;box-shadow:0 20px 60px #0004;text-align:center">
+    <div style="font-size:14px;font-weight:900;color:#222;margin-bottom:16px">📸 Profil Resmi Değiştir</div>
+    <div id="avatar-preview" style="width:90px;height:90px;border-radius:22px;background:#f3f4f6;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:44px;overflow:hidden"></div>
+    <label style="display:block;width:100%;padding:12px;border-radius:12px;border:2px dashed #4F46E5;background:#EEF2FF;color:#4F46E5;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px;font-family:Nunito,sans-serif">
+      📁 Fotoğraf Seç
+      <input type="file" accept="image/*" style="display:none" onchange="previewAvatar(this)"/>
+    </label>
+    <div style="display:flex;gap:8px">
+      <button onclick="closeAvatarModal()" style="flex:1;padding:10px;border-radius:10px;border:2px solid #e5e7eb;background:white;font-size:12px;font-weight:800;color:#888;cursor:pointer;font-family:Nunito,sans-serif">İptal</button>
+      <button onclick="saveAvatar()" id="avatar-save-btn" style="flex:2;padding:10px;border-radius:10px;border:none;background:linear-gradient(135deg,#4F46E5,#7C3AED);color:white;font-size:13px;font-weight:900;cursor:pointer;font-family:Nunito,sans-serif">💾 Kaydet</button>
+    </div>
+    <button onclick="removeAvatar()" style="width:100%;padding:8px;border-radius:10px;border:2px solid #fee2e2;background:white;color:#ef4444;font-size:11px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif;margin-top:8px">🗑️ Resmi Kaldır</button>
+  </div>
+</div>
+</body>
+</html>
