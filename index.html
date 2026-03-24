@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>📚 LGS Hazırlık Soru Takip</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" onerror="fbLoadErr()"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onerror="fbLoadErr()"></script>
+<script>function fbLoadErr(){document.body.innerHTML='<div style="font-family:sans-serif;text-align:center;padding:60px 20px"><div style="font-size:48px;margin-bottom:16px">⚠️</div><h2 style="color:#ef4444;margin-bottom:12px">Firebase yüklenemedi</h2><p style="color:#666;max-width:360px;margin:0 auto 20px">İnternet bağlantınızı kontrol edin ve sayfayı yenileyin.</p><button onclick="location.reload()" style="padding:12px 28px;background:#4F46E5;color:white;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer">🔄 Yenile</button></div>';}</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -342,6 +343,10 @@ function wstats(ws,sid){
 // ═══════════════════════════════════════════════════════════════════
 window.addEventListener("DOMContentLoaded", function(){
   try{
+    if(typeof firebase === "undefined"){
+      document.body.innerHTML='<div style="font-family:sans-serif;text-align:center;padding:60px 20px"><div style="font-size:48px;margin-bottom:16px">⚠️</div><h2 style="color:#ef4444;margin-bottom:12px">Firebase yüklenemedi</h2><p style="color:#666;max-width:360px;margin:0 auto 20px">İnternet bağlantınızı kontrol edin ve sayfayı yenileyin.</p><button onclick="location.reload()" style="padding:12px 28px;background:#4F46E5;color:white;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer">🔄 Yenile</button></div>';
+      return;
+    }
     var app; try{app=firebase.app();}catch(e){app=firebase.initializeApp(FB_CFG);}
     db = firebase.database(app);
     db.ref(".info/connected").on("value",function(s){ syncState(s.val()?"ok":"saving"); });
