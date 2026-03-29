@@ -247,7 +247,7 @@ var MONTHS = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağust
 var DAYS_SHORT = ["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"];
 var DAYS_LONG  = ["Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi","Pazar"];
 var START = "2026-01-01";
-var NET_DIVISOR = 4; // 4 yanlış = 1 doğru
+var NET_DIVISOR = 3; // 3 yanlış = 1 doğru
 var READONLY = (new URLSearchParams(window.location.search)).has("izle");
 function injectReadonlyCSS(){
   if(document.getElementById("ro-style")) return; // already injected
@@ -273,9 +273,12 @@ var saveTimers = {};
 // ═══════════════════════════════════════════════════════════════════
 //  HELPERS
 // ═══════════════════════════════════════════════════════════════════
-function today(){ return new Date().toISOString().split("T")[0]; }
+function today(){
+  var d=new Date(); d.setMinutes(d.getMinutes()+d.getTimezoneOffset()+180);
+  return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+}
 function pad(n){ return String(n).padStart(2,"0"); }
-function ymNow(){ var d=new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1); }
+function ymNow(){ var d=new Date(); d.setMinutes(d.getMinutes()+d.getTimezoneOffset()+180); return d.getFullYear()+"-"+pad(d.getMonth()+1); }
 function ym(y,m){ return y+"-"+pad(m+1); }
 function dim(y,m){ return new Date(y,m+1,0).getDate(); }
 function ds(y,m,d){ return y+"-"+pad(m+1)+"-"+pad(d); }
@@ -593,7 +596,7 @@ function renderDaily(){
           +'<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-top:4px">'
           +'<div style="display:flex;gap:10px"><span style="color:#22c55e">✓%'+cpct+'</span><span style="color:#ef4444">✗%'+wpct+'</span></div>'
           +'<span id="nv-'+s.id+'" style="color:'+(n>=0?"#22c55e":"#ef4444")+'">Net: '+fnet(n)+'</span></div>':"")
-        +'<div style="background:#EEF2FF;border-radius:10px;padding:6px 10px;margin-top:10px;font-size:11px;color:#4F46E5;font-weight:700">ℹ️ Net = Doğru − Yanlış ÷ 4</div>'
+        +'<div style="background:#EEF2FF;border-radius:10px;padding:6px 10px;margin-top:10px;font-size:11px;color:#4F46E5;font-weight:700">ℹ️ Net = Doğru − Yanlış ÷ 3</div>'
         +'</div>';
     }
     scards+='<div class="scard'+(has?" has":"")+'" style="border-color:'+(has?s.c+'55':"transparent")+'">'
@@ -625,7 +628,7 @@ function renderDaily(){
     +(tod.total>0?'<span style="font-weight:900;font-size:12px;color:'+(tod.net>=0?"#22c55e":"#ef4444")+'">Net: '+fnet(tod.net)+'</span>':"")
     +'</div>'
     +scards
-    +'<div style="text-align:center;font-size:11px;color:#aaa;font-weight:700;margin-top:8px">✅ Otomatik kaydediliyor · Net = Doğru − Yanlış÷4</div>';
+    +'<div style="text-align:center;font-size:11px;color:#aaa;font-weight:700;margin-top:8px">✅ Otomatik kaydediliyor · Net = Doğru − Yanlış÷3</div>';
 }
 
 function selD(d){if(d>today()||d<START)return;selDate=d;expSubj=null;renderDaily();updateHdr();}
@@ -967,7 +970,7 @@ function renderStats(){
     +'<div class="card" style="display:flex;align-items:center;gap:16px">'
     +'<div style="flex:1"><div style="font-size:13px;color:#888;font-weight:700">Genel Net Puan</div>'
     +'<div style="font-size:34px;font-weight:900;color:var(--p)">'+fnet(gn)+'</div>'
-    +'<div style="font-size:11px;color:#aaa;font-weight:700;margin-top:2px">= Doğru − Yanlış÷4</div></div>'
+    +'<div style="font-size:11px;color:#aaa;font-weight:700;margin-top:2px">= Doğru − Yanlış÷3</div></div>'
     +ring(gap,"var(--p)",70)+'</div>'
     // Radar chart (all subjects except Deneme)
     +(gt>0?'<div class="card"><div class="card-ttl">🕸️ Ders Radar Analizi <span style="font-size:11px;color:#aaa;font-weight:600">(Deneme hariç)</span></div><div style="position:relative;height:280px"><canvas id="radarChart"></canvas></div></div>':"")
@@ -984,7 +987,7 @@ function renderStats(){
     +(mrows?'<div class="card"><div class="card-ttl">📅 Aylık Özet</div>'+mrows+'</div>':"")
     +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px">'
     +'<button class="btn-pdf" onclick="exportStatsPDF()">📄 Tüm İstatistik PDF</button></div>'
-    +'<div style="text-align:center;margin-top:8px;font-size:11px;color:#ccc;font-weight:700">1 Ocak 2026\'dan itibaren · Net = Doğru − Yanlış÷4</div>';
+    +'<div style="text-align:center;margin-top:8px;font-size:11px;color:#ccc;font-weight:700">1 Ocak 2026\'dan itibaren · Net = Doğru − Yanlış÷3</div>';
 
   // Draw charts after DOM update
   if(gt>0) setTimeout(function(){ drawCharts(sat, activeMonths); }, 50);
@@ -1163,7 +1166,7 @@ function pdfHeader(doc,title,sub){
   doc.setFontSize(15); doc.text(tr(title),14,14);
   doc.setFontSize(9);
   doc.text(tr(st.name)+" | "+tr(sub),14,22);
-  doc.text("Net = Dogru - Yanlis / 4",14,31);
+  doc.text("Net = Dogru - Yanlis / 3",14,31);
   doc.text(new Date().toLocaleDateString("tr-TR"),196,31,{align:"right"});
   doc.setTextColor(30,30,30);
   return 44;
@@ -2059,7 +2062,9 @@ function renderCmpWeekly(){
   html+=subjTable(recs,cmpRecs,"📚 Haftalık Ders Bazında",function(r,sid){
     return wstFrom(r,selWeekStart,sid);
   });
+  html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:6px">📊 Son 12 Hafta — Toplam Soru</div><div style="position:relative;height:200px"><canvas id="adm-weekly-bar"></canvas></div></div>';
   document.getElementById("vw").innerHTML=html;
+  setTimeout(function(){ drawAdmWeeklyBar(); },50);
 }
 function cmpWkPrev(){var p=addDays(selWeekStart,-7);if(p<START)return;selWeekStart=p;renderCmpWeekly();}
 function cmpWkNext(){var n=addDays(selWeekStart,7),td=today();if(n>weekStart(td))return;selWeekStart=n;renderCmpWeekly();}
@@ -2085,12 +2090,14 @@ function renderCmpMonthly(){
   // Active days per student
   var oDays=Object.keys(recs).filter(function(d){return d.startsWith(selMonth)&&stFrom(recs,d).total>0;}).length;
   var zDays=Object.keys(cmpRecs).filter(function(d){return d.startsWith(selMonth)&&stFrom(cmpRecs,d).total>0;}).length;
+  html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:6px">📊 Aylık Soru Karşılaştırması</div><div style="position:relative;height:200px"><canvas id="adm-monthly-bar"></canvas></div></div>';
   html+='<div class="card"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
     +'<div style="text-align:center"><div style="font-size:11px;color:#888;font-weight:700;margin-bottom:4px">👦 Aktif Gün</div><div style="font-size:26px;font-weight:900;color:#4F46E5">'+oDays+'</div></div>'
     +'<div style="text-align:center"><div style="font-size:11px;color:#888;font-weight:700;margin-bottom:4px">👧 Aktif Gün</div><div style="font-size:26px;font-weight:900;color:#DB2777">'+zDays+'</div></div>'
     +'</div></div>';
 
   document.getElementById("vw").innerHTML=html;
+  setTimeout(function(){ drawAdmMonthlyBar(); },50);
 }
 function cmpMPrev(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i>0){selMonth=ms[i-1];renderCmpMonthly();}}
 function cmpMNext(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i<ms.length-1){selMonth=ms[i+1];renderCmpMonthly();}}
@@ -2110,6 +2117,7 @@ function renderCmpAll(){
     +'<div style="background:#FDF2F8;border-radius:14px;padding:14px;text-align:center"><div style="font-size:11px;color:#DB2777;font-weight:700">👧 Aktif Gün</div><div style="font-size:28px;font-weight:900;color:#DB2777">'+zAll.days+'</div></div>'
     +'</div>';
 
+  html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:6px">📊 Aylık Soru Trendi</div><div style="position:relative;height:220px"><canvas id="adm-all-bar"></canvas></div></div>';
   // Monthly trend table
   html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:8px">📈 Aylık Net Karşılaştırması</div>';
   html+='<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;font-size:10px;font-weight:800;color:#aaa;padding:0 0 6px;border-bottom:2px solid #f3f4f6">'
@@ -2131,6 +2139,7 @@ function renderCmpAll(){
   });
   html+='</div>';
   document.getElementById("vw").innerHTML=html;
+  setTimeout(function(){ drawAdmAllBar(); },50);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2423,6 +2432,119 @@ function removeAvatar(){
       applyAvatar(curStudent,null);
       closeAvatarModal();
     });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADMIN CHARTS
+// ═══════════════════════════════════════════════════════════════════
+function admBarOpts(yLabel,stacked){
+  return {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:10},boxWidth:10,padding:8}},
+      tooltip:{callbacks:{footer:function(ctx){
+        if(!stacked)return"";
+        var sum=ctx.reduce(function(a,c){return a+c.parsed.y;},0);
+        return "Toplam: "+sum;
+      }}}},
+    scales:{
+      x:{grid:{display:false},ticks:{font:{family:"Nunito",size:9},maxRotation:0}},
+      y:{grid:{color:"#f3f4f6"},ticks:{font:{family:"Nunito",size:9}},
+        title:{display:!!yLabel,text:yLabel||"",font:{size:9}},
+        beginAtZero:true,stacked:!!stacked}
+    }
+  };
+}
+
+function drawAdmDailyBar(){
+  var el=document.getElementById("adm-daily-bar"); if(!el)return;
+  destroyChart("adm-daily-bar");
+  var days=[]; var d=today();
+  for(var i=13;i>=0;i--) days.push(addDays(d,-i));
+  var labels=days.map(function(x){return x.slice(8)+"/"+x.slice(5,7);});
+  var oVals=days.map(function(x){return stFrom(recs,x).total;});
+  var zVals=days.map(function(x){return stFrom(cmpRecs,x).total;});
+  _charts["adm-daily-bar"]=new Chart(el,{
+    type:"bar",
+    data:{labels:labels,datasets:[
+      {label:"👦 Ömer Doruk",data:oVals,backgroundColor:"rgba(79,70,229,0.75)",borderRadius:4},
+      {label:"👧 Zeynep Alya",data:zVals,backgroundColor:"rgba(219,39,119,0.65)",borderRadius:4}
+    ]},
+    options:admBarOpts("Soru",false)
+  });
+}
+
+function drawAdmWeeklyBar(){
+  var el=document.getElementById("adm-weekly-bar"); if(!el)return;
+  destroyChart("adm-weekly-bar");
+  var weeks=[]; var ws2=selWeekStart;
+  for(var i=0;i<12;i++){weeks.unshift(ws2);ws2=addDays(ws2,-7);}
+  var labels=weeks.map(function(w){return w.slice(8)+"/"+w.slice(5,7);});
+  var oVals=weeks.map(function(w){return wstFrom(recs,w).total;});
+  var zVals=weeks.map(function(w){return wstFrom(cmpRecs,w).total;});
+  _charts["adm-weekly-bar"]=new Chart(el,{
+    type:"bar",
+    data:{labels:labels,datasets:[
+      {label:"👦 Ömer Doruk",data:oVals,backgroundColor:"rgba(79,70,229,0.75)",borderRadius:4},
+      {label:"👧 Zeynep Alya",data:zVals,backgroundColor:"rgba(219,39,119,0.65)",borderRadius:4}
+    ]},
+    options:admBarOpts("Soru",false)
+  });
+}
+
+function drawAdmMonthlyBar(){
+  var el=document.getElementById("adm-monthly-bar"); if(!el)return;
+  destroyChart("adm-monthly-bar");
+  var pm=parseYM(selMonth);
+  var daysInMonth=dim(pm.y,pm.m);
+  var labels=[],oVals=[],zVals=[];
+  for(var d2=1;d2<=daysInMonth;d2++){
+    var dstr=ds(pm.y,pm.m,d2);
+    var oD=stFrom(recs,dstr), zD=stFrom(cmpRecs,dstr);
+    if(!oD.total&&!zD.total)continue;
+    labels.push(String(d2));
+    oVals.push(oD.total);
+    zVals.push(zD.total);
+  }
+  if(!labels.length){labels=["Veri yok"];oVals=[0];zVals=[0];}
+  _charts["adm-monthly-bar"]=new Chart(el,{
+    type:"bar",
+    data:{labels:labels,datasets:[
+      {label:"👦 Ömer Doruk",data:oVals,backgroundColor:"rgba(79,70,229,0.75)",borderRadius:3},
+      {label:"👧 Zeynep Alya",data:zVals,backgroundColor:"rgba(219,39,119,0.65)",borderRadius:3}
+    ]},
+    options:admBarOpts("Soru",false)
+  });
+}
+
+function drawAdmAllBar(){
+  var el=document.getElementById("adm-all-bar"); if(!el)return;
+  destroyChart("adm-all-bar");
+  var months=availMonths().filter(function(ym){
+    return mstFrom(recs,ym).total>0||mstFrom(cmpRecs,ym).total>0;
+  });
+  var labels=months.map(function(ym){var p=parseYM(ym);return MONTHS_TR[p.m].substring(0,3)+" "+String(p.y).slice(2);});
+  var oVals=months.map(function(ym){return mstFrom(recs,ym).total;});
+  var zVals=months.map(function(ym){return mstFrom(cmpRecs,ym).total;});
+  var oNet=months.map(function(ym){return fnet(mstFrom(recs,ym).net);});
+  var zNet=months.map(function(ym){return fnet(mstFrom(cmpRecs,ym).net);});
+  _charts["adm-all-bar"]=new Chart(el,{
+    type:"bar",
+    data:{labels:labels,datasets:[
+      {label:"👦 Ömer Soru",data:oVals,backgroundColor:"rgba(79,70,229,0.75)",borderRadius:4,yAxisID:"y"},
+      {label:"👧 Zeynep Soru",data:zVals,backgroundColor:"rgba(219,39,119,0.65)",borderRadius:4,yAxisID:"y"},
+      {label:"👦 Ömer Net",data:oNet,type:"line",borderColor:"rgba(79,70,229,1)",backgroundColor:"transparent",borderWidth:2.5,pointRadius:4,yAxisID:"y2"},
+      {label:"👧 Zeynep Net",data:zNet,type:"line",borderColor:"rgba(219,39,119,1)",backgroundColor:"transparent",borderWidth:2.5,pointRadius:4,yAxisID:"y2"}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:10},boxWidth:10,padding:6}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{family:"Nunito",size:9},maxRotation:0}},
+        y:{grid:{color:"#f3f4f6"},ticks:{font:{family:"Nunito",size:9}},beginAtZero:true,title:{display:true,text:"Soru",font:{size:9}}},
+        y2:{position:"right",grid:{display:false},ticks:{font:{family:"Nunito",size:9}},title:{display:true,text:"Net",font:{size:9}}}
+      }
+    }
+  });
 }
 // ── ŞİFRE MODAL FONKSİYONLARI ──────────────────────────────────────
 var _pwTarget = null;
