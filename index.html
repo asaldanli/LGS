@@ -730,9 +730,8 @@ function renderWeekly(){
     +'<div style="position:relative;height:200px"><canvas id="weekBarChart"></canvas></div></div>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px">'
     +'<button class="btn-pdf" onclick="exportWeekPDF()">📄 PDF İndir</button>'
-    +'</div>'
-    +'<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:6px">📊 Son 12 Hafta — Ders Bazında Net</div><div style="position:relative;height:200px"><canvas id="std-weekly-subj-bar"></canvas></div></div>';
-  setTimeout(function(){ drawWeekBarChart(); drawStdWeeklySubjBar(); }, 50);
+    +'</div>';
+  setTimeout(function(){ drawWeekBarChart(); }, 50);
 }
 
 
@@ -2462,35 +2461,6 @@ function drawStdDailyBar(){
   });
 }
 
-function drawStdWeeklySubjBar(){
-  var el=document.getElementById("std-weekly-subj-bar"); if(!el)return;
-  destroyChart("std-weekly-subj-bar");
-  var weeks=[]; var ws2=selWeekStart;
-  for(var i=0;i<12;i++){weeks.unshift(ws2); ws2=addDays(ws2,-7);}
-  var labels=weeks.map(function(w){return w.slice(8)+"/"+w.slice(5,7);});
-  var datasets=SUBJ.map(function(s){
-    return {
-      label:s.n,
-      data:weeks.map(function(w){return wstats(w,s.id).net;}),
-      backgroundColor:s.c+"aa",
-      borderColor:s.c,
-      borderWidth:1,
-      borderRadius:3
-    };
-  });
-  _charts["std-weekly-subj-bar"]=new Chart(el,{
-    type:"bar",
-    data:{labels:labels,datasets:datasets},
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:9},boxWidth:9,padding:6}}},
-      scales:{
-        x:{grid:{display:false},ticks:{font:{family:"Nunito",size:9},maxRotation:0}},
-        y:{grid:{color:"#f3f4f6"},ticks:{font:{family:"Nunito",size:9}},title:{display:true,text:"Net",font:{size:9}},stacked:false}
-      }
-    }
-  });
-}
 
 function drawStdMonthlyBar(){
   var el=document.getElementById("std-monthly-bar"); if(!el)return;
