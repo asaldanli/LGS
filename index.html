@@ -628,7 +628,9 @@ function renderDaily(){
     +(tod.total>0?'<span style="font-weight:900;font-size:12px;color:'+(tod.net>=0?"#22c55e":"#ef4444")+'">Net: '+fnet(tod.net)+'</span>':"")
     +'</div>'
     +scards
-    +'<div style="text-align:center;font-size:11px;color:#aaa;font-weight:700;margin-top:8px">✅ Otomatik kaydediliyor · Net = Doğru − Yanlış÷3</div>';
+    +'<div style="text-align:center;font-size:11px;color:#aaa;font-weight:700;margin-top:8px">✅ Otomatik kaydediliyor · Net = Doğru − Yanlış÷3</div>'
+    +'<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:6px">📊 Son 14 Gün — Toplam Soru</div><div style="position:relative;height:170px"><canvas id="std-daily-bar"></canvas></div></div>';
+  setTimeout(function(){ drawStdDailyBar(); },50);
 }
 
 function selD(d){if(d>today()||d<START)return;selDate=d;expSubj=null;renderDaily();updateHdr();}
@@ -728,8 +730,9 @@ function renderWeekly(){
     +'<div style="position:relative;height:200px"><canvas id="weekBarChart"></canvas></div></div>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px">'
     +'<button class="btn-pdf" onclick="exportWeekPDF()">📄 PDF İndir</button>'
-    +'</div>';
-  setTimeout(function(){ drawWeekBarChart(); }, 50);
+    +'</div>'
+    +'<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:6px">📊 Son 12 Hafta — Ders Bazında Net</div><div style="position:relative;height:200px"><canvas id="std-weekly-subj-bar"></canvas></div></div>';
+  setTimeout(function(){ drawWeekBarChart(); drawStdWeeklySubjBar(); }, 50);
 }
 
 
@@ -836,9 +839,11 @@ function renderMonthly(){
     }
     html+='</div>';
   });
+  html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:6px">📊 Aylık Ders Soru Dağılımı</div><div style="position:relative;height:200px"><canvas id="std-monthly-bar"></canvas></div></div>';
   html+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px">'
     +'<button class="btn-pdf" onclick="exportMonthPDF()">📄 PDF İndir</button></div>';
   document.getElementById("vw").innerHTML=html;
+  setTimeout(function(){ drawStdMonthlyBar(); },50);
 }
 function mPrev(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i>0){selMonth=ms[i-1];renderMonthly();}}
 function mNext(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i<ms.length-1){selMonth=ms[i+1];renderMonthly();}}
@@ -2001,7 +2006,9 @@ function renderCmpDaily(){
     var w=cw(sr.total||0,sr.correct||0);
     return {total:sr.total||0,correct:sr.correct||0,wrong:w,net:calcNet(sr.correct||0,w)};
   });
+  html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:6px">📊 Son 14 Gün — Toplam Soru</div><div style="position:relative;height:180px"><canvas id="adm-daily-bar"></canvas></div></div>';
   document.getElementById("vw").innerHTML=html;
+  setTimeout(function(){ drawAdmDailyBar(); },50);
 }
 
 function selCmpDay(d){ selDate=d; renderCmpDaily(); }
@@ -2117,7 +2124,6 @@ function renderCmpAll(){
     +'<div style="background:#FDF2F8;border-radius:14px;padding:14px;text-align:center"><div style="font-size:11px;color:#DB2777;font-weight:700">👧 Aktif Gün</div><div style="font-size:28px;font-weight:900;color:#DB2777">'+zAll.days+'</div></div>'
     +'</div>';
 
-  html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:6px">📊 Aylık Soru Trendi</div><div style="position:relative;height:220px"><canvas id="adm-all-bar"></canvas></div></div>';
   // Monthly trend table
   html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:8px">📈 Aylık Net Karşılaştırması</div>';
   html+='<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;font-size:10px;font-weight:800;color:#aaa;padding:0 0 6px;border-bottom:2px solid #f3f4f6">'
@@ -2139,7 +2145,6 @@ function renderCmpAll(){
   });
   html+='</div>';
   document.getElementById("vw").innerHTML=html;
-  setTimeout(function(){ drawAdmAllBar(); },50);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2434,6 +2439,75 @@ function removeAvatar(){
     });
 }
 
+
+// ═══════════════════════════════════════════════════════════════════
+//  ÖĞRENCI / ÖĞRETMEN GRAFİKLERİ
+// ═══════════════════════════════════════════════════════════════════
+function drawStdDailyBar(){
+  var el=document.getElementById("std-daily-bar"); if(!el)return;
+  destroyChart("std-daily-bar");
+  var days=[]; var d=selDate;
+  for(var i=13;i>=0;i--) days.push(addDays(d,-i));
+  var labels=days.map(function(x){return x.slice(8)+"/"+x.slice(5,7);});
+  var totals=days.map(function(x){return dstats(x).total;});
+  var corrects=days.map(function(x){return dstats(x).correct;});
+  var wrongs=days.map(function(x){return dstats(x).wrong;});
+  _charts["std-daily-bar"]=new Chart(el,{
+    type:"bar",
+    data:{labels:labels,datasets:[
+      {label:"Doğru",data:corrects,backgroundColor:"rgba(34,197,94,0.8)",borderRadius:4,stack:"s"},
+      {label:"Yanlış",data:wrongs,backgroundColor:"rgba(239,68,68,0.65)",borderRadius:4,stack:"s"}
+    ]},
+    options:admBarOpts("Soru",true)
+  });
+}
+
+function drawStdWeeklySubjBar(){
+  var el=document.getElementById("std-weekly-subj-bar"); if(!el)return;
+  destroyChart("std-weekly-subj-bar");
+  var weeks=[]; var ws2=selWeekStart;
+  for(var i=0;i<12;i++){weeks.unshift(ws2); ws2=addDays(ws2,-7);}
+  var labels=weeks.map(function(w){return w.slice(8)+"/"+w.slice(5,7);});
+  var datasets=SUBJ.map(function(s){
+    return {
+      label:s.n,
+      data:weeks.map(function(w){return wstats(w,s.id).net;}),
+      backgroundColor:s.c+"aa",
+      borderColor:s.c,
+      borderWidth:1,
+      borderRadius:3
+    };
+  });
+  _charts["std-weekly-subj-bar"]=new Chart(el,{
+    type:"bar",
+    data:{labels:labels,datasets:datasets},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:9},boxWidth:9,padding:6}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{family:"Nunito",size:9},maxRotation:0}},
+        y:{grid:{color:"#f3f4f6"},ticks:{font:{family:"Nunito",size:9}},title:{display:true,text:"Net",font:{size:9}},stacked:false}
+      }
+    }
+  });
+}
+
+function drawStdMonthlyBar(){
+  var el=document.getElementById("std-monthly-bar"); if(!el)return;
+  destroyChart("std-monthly-bar");
+  var labels=SUBJ.map(function(s){return s.n;});
+  var totals=SUBJ.map(function(s){return mstats(selMonth,s.id).total;});
+  var corrects=SUBJ.map(function(s){return mstats(selMonth,s.id).correct;});
+  var wrongs=SUBJ.map(function(s){return mstats(selMonth,s.id).wrong;});
+  _charts["std-monthly-bar"]=new Chart(el,{
+    type:"bar",
+    data:{labels:labels,datasets:[
+      {label:"Doğru",data:corrects,backgroundColor:"rgba(34,197,94,0.8)",borderRadius:4,stack:"s"},
+      {label:"Yanlış",data:wrongs,backgroundColor:"rgba(239,68,68,0.65)",borderRadius:4,stack:"s"}
+    ]},
+    options:admBarOpts("Soru",true)
+  });
+}
 // ═══════════════════════════════════════════════════════════════════
 //  ADMIN CHARTS
 // ═══════════════════════════════════════════════════════════════════
