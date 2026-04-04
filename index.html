@@ -4,6 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>📚 LGS Hazırlık Soru Takip</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234F46E5'/%3E%3Ctext y='48' x='8' font-size='46'%3E📚%3C/text%3E%3C/svg%3E"/>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234F46E5'/%3E%3Ctext y='48' x='8' font-size='46'%3E📚%3C/text%3E%3C/svg%3E"/>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" onerror="fbLoadErr()"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onerror="fbLoadErr()"></script>
@@ -508,6 +510,28 @@ function showGoalOk(){
   btn.style.background="linear-gradient(135deg,#22c55e,#16a34a)";
   setTimeout(function(){btn.textContent="🎯 Hedefleri Kaydet";btn.style.background="linear-gradient(135deg,var(--p),var(--v))";},2000);
 }
+
+// ── Önceki ayın hedeflerini bu aya aktar ──────────────────────────
+function getPrevMonth(ymStr){
+  var p=parseYM(ymStr), m=p.m-1, y=p.y;
+  if(m<0){m=11;y--;}
+  return y+"-"+pad(m+1);
+}
+
+function carryGoalsIfEmpty(){
+  // If current month has no goals set, copy from the most recent month that has goals
+  if(goals[selMonth] && Object.keys(goals[selMonth]).length>0) return; // already has goals
+  var months=availMonths();
+  var curIdx=months.indexOf(selMonth);
+  for(var i=curIdx-1;i>=0;i--){
+    var prevM=months[i];
+    if(goals[prevM] && Object.keys(goals[prevM]).length>0){
+      // Deep copy
+      goals[selMonth]=JSON.parse(JSON.stringify(goals[prevM]));
+      break;
+    }
+  }
+}
 function setGoalField(sid,field,val){
   if(!goals[selMonth])goals[selMonth]={};
   if(sid==="__acc"){
@@ -851,12 +875,13 @@ function mNext(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i<ms.length-1){s
 //  GOALS VIEW
 // ═══════════════════════════════════════════════════════════════════
 function renderGoals(){
+  carryGoalsIfEmpty();
   var p=parseYM(selMonth);
   var globalAcc=(goals[selMonth]&&goals[selMonth]["__acc"])||0;
   var totalMs=mstats(selMonth);
   var overallAp=totalMs.total>0?parseFloat((totalMs.correct/totalMs.total*100).toFixed(2)):0;
   var html='<div class="period-nav"><button onclick="mPrev()">‹</button><span>🎯 '+MONTHS[p.m]+' '+p.y+'</span><button onclick="mNext()">›</button></div>'
-    +'<div class="tip">💡 Her ders için soru hedefi, tüm ay için tek doğruluk hedefi gir.</div>'
+    +'<div class="tip">💡 Hedefler bir önceki aydan otomatik aktarılır. İstediğiniz zaman değiştirebilirsiniz.</div>'
     +'<div class="card" style="border:2px solid #22c55e55;margin-bottom:10px">'
     +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'
     +'<div style="width:42px;height:42px;border-radius:13px;background:#f0fdf4;display:flex;align-items:center;justify-content:center;font-size:22px">🎯</div>'
@@ -2590,6 +2615,8 @@ function drawAdmAllBar(){
     }
   });
 }
+
+
 // ── ŞİFRE MODAL FONKSİYONLARI ──────────────────────────────────────
 var _pwTarget = null;
 
@@ -2725,5 +2752,6 @@ document.addEventListener("click", function(e){
     <button onclick="removeAvatar()" style="width:100%;padding:8px;border-radius:10px;border:2px solid #fee2e2;background:white;color:#ef4444;font-size:11px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif;margin-top:8px">🗑️ Resmi Kaldır</button>
   </div>
 </div>
+
 </body>
 </html>
