@@ -386,17 +386,12 @@ window.addEventListener("DOMContentLoaded", function(){
     var app; try{app=firebase.app();}catch(e){app=firebase.initializeApp(FB_CFG);}
     db = firebase.database(app);
     db.ref(".info/connected").on("value",function(s){ syncState(s.val()?"ok":"saving"); });
-    // Oturum yalnızca bu sekmede tutulur; sayfa açılışında her zaman çıkış yapılmış başlanır
     // Öğretmen bağlantısı (?o=şifre): şifre adres çubuğundan hemen silinir, giriş otomatik yapılır
     var linkPw = (new URLSearchParams(window.location.search)).get("o");
     if(linkPw!==null){
       try{ history.replaceState(null,"",window.location.pathname+(READONLY?"?izle":"")); }catch(e){}
     }
-    firebase.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION)
-      .catch(function(){})
-      .then(function(){ return firebase.auth().signOut(); })
-      .catch(function(){})
-      .then(function(){ if(linkPw) teacherLinkLogin(linkPw); });
+    startAuthFlow(linkPw);
     // Show picker
     document.getElementById("picker").style.display="flex";
     document.getElementById("app").style.display="none";
@@ -408,6 +403,44 @@ window.addEventListener("DOMContentLoaded", function(){
     }
   }catch(e){ console.error(e); }
 });
+
+// ── "Bu cihazda beni hatırla": işaretlenirse oturum cihazda kalır ve sonraki açılışta şifre sorulmaz ──
+// İşaretlenmezse oturum yalnızca açık sekmede tutulur ve sayfa açılışında çıkış yapılmış başlanır.
+var REMEMBER_KEY = "lgs_hatirla";
+function getRemembered(){
+  try{ var v=JSON.parse(localStorage.getItem(REMEMBER_KEY)||"null"); return (v&&AUTH_EMAILS[v.who])?v.who:null; }
+  catch(e){ return null; }
+}
+function setRemembered(who){ try{ localStorage.setItem(REMEMBER_KEY,JSON.stringify({who:who})); }catch(e){} }
+function clearRemembered(){ try{ localStorage.removeItem(REMEMBER_KEY); }catch(e){} }
+
+function resumeRemembered(who){
+  if(who==="teacher"){
+    loadProfilePics();
+    document.getElementById("teacher-modal").style.display="flex";
+  } else {
+    pickStudent(who);
+  }
+}
+
+// Açılışta: hatırlanan cihazsa kayıtlı oturumla doğrudan girer, değilse çıkış yapılmış başlar
+function startAuthFlow(linkPw){
+  var auth=firebase.auth(), P=firebase.auth.Auth.Persistence;
+  var rem=(linkPw===null&&!READONLY)?getRemembered():null;
+  if(rem){
+    auth.setPersistence(P.LOCAL).catch(function(){}).then(function(){
+      return new Promise(function(res){ var off=auth.onAuthStateChanged(function(u){ off(); res(u); }); });
+    }).then(function(u){
+      if(u&&u.email===authEmail(rem)){ resumeRemembered(rem); return; }
+      clearRemembered(); // oturum geçersiz (şifre değişmiş ya da silinmiş olabilir)
+      return auth.signOut().catch(function(){});
+    });
+    return;
+  }
+  auth.setPersistence(P.SESSION).catch(function(){})
+    .then(function(){ return auth.signOut(); }).catch(function(){})
+    .then(function(){ if(linkPw) teacherLinkLogin(linkPw); });
+}
 
 // Gizli öğretmen bağlantısı: şifreyi yazdırmadan öğretmen hesabıyla girer ve öğrenci seçtirir
 function teacherLinkLogin(pw){
@@ -432,7 +465,10 @@ function showPicker(){
   recs={}; goals={}; cmpRecs={};
   var wasTeacher=_teacherMode;
   curStudent=null; _teacherMode=false;
-  if(!wasTeacher) authSignOutSoon(); // öğretmen oturumu açık kalır, diğer öğrenciyi şifresiz seçebilsin
+  if(!wasTeacher){
+    clearRemembered(); // "Değiştir" cihazı unutturur
+    authSignOutSoon();
+  } // öğretmen oturumu açık kalır, diğer öğrenciyi şifresiz seçebilsin
   resetSessionUI();
   ["omer","zeynep"].forEach(function(sid){ applyAvatar(sid,PROFILE_PICS[sid]); }); // oturumda yüklenmiş resimler
   document.getElementById("app").style.display="none";
@@ -2770,7 +2806,7 @@ function loadProfilePics(){
       var b64 = snap.val();
       PROFILE_PICS[sid] = b64||null;
       applyAvatar(sid, b64);
-    });
+    },function(){}); // oturum yoksa ya da süresi dolmuşsa resimler yüklenmez, sessizce geçilir
   });
 }
 
@@ -3032,6 +3068,8 @@ function askPassword(sid){
   document.getElementById("pw-name").textContent = st.name;
   document.getElementById("pw-input").value = "";
   document.getElementById("pw-err").textContent = "";
+  document.getElementById("pw-remember").checked = false;
+  document.getElementById("pw-remember-row").style.display = READONLY ? "none" : "flex";
   var btn = document.getElementById("pw-btn");
   var grads = {omer:"linear-gradient(135deg,#4F46E5,#7C3AED)",zeynep:"linear-gradient(135deg,#DB2777,#9D174D)",admin:"linear-gradient(135deg,#d97706,#b45309)",teacher:"linear-gradient(135deg,#0891b2,#0e7490)"};
   btn.style.background = grads[sid]||grads.omer;
@@ -3084,7 +3122,12 @@ function pwSubmit(){
   var val = document.getElementById("pw-input").value;
   var btn = document.getElementById("pw-btn");
   _pwBusy = true; btn.disabled = true; btn.style.opacity = ".6";
-  authSignIn(authWho(target), val).then(function(){
+  var remember = !READONLY && document.getElementById("pw-remember").checked;
+  var P = firebase.auth.Auth.Persistence;
+  firebase.auth().setPersistence(remember?P.LOCAL:P.SESSION).catch(function(){}).then(function(){
+    return authSignIn(authWho(target), val);
+  }).then(function(){
+    if(remember) setRemembered(target); else clearRemembered();
     document.getElementById("pw-modal").style.display = "none";
     _pwTarget = null;
     if(target==="teacher"){
@@ -3119,6 +3162,9 @@ document.addEventListener("click", function(e){
         oninput="pwErr(false)" onkeydown="if(event.key==='Enter')pwSubmit()"/>
       <button onclick="togglePwVis()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;cursor:pointer;color:#aaa" id="pw-eye">👁</button>
     </div>
+    <label id="pw-remember-row" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;font-size:12px;font-weight:700;color:#666;cursor:pointer">
+      <input id="pw-remember" type="checkbox" style="width:16px;height:16px"> Bu cihazda beni hatırla
+    </label>
     <div id="pw-err" style="font-size:12px;font-weight:800;color:#ef4444;margin-bottom:12px;min-height:18px"></div>
     <div style="display:flex;gap:10px">
       <button onclick="closePwModal()" style="flex:1;padding:12px;border-radius:12px;border:2px solid #e5e7eb;background:white;font-size:13px;font-weight:800;color:#888;font-family:Nunito,sans-serif;cursor:pointer">İptal</button>
