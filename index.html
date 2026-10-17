@@ -199,6 +199,7 @@ button{cursor:pointer;font-family:'Nunito','Segoe UI',sans-serif}
       <button id="nb-cmp-monthly" onclick="gv('cmp-monthly')" style="display:none">📊 Aylık</button>
       <button id="nb-cmp-all"     onclick="gv('cmp-all')"     style="display:none">🏆 Genel</button>
       <button id="nb-cmp-subj"    onclick="gv('cmp-subj')"    style="display:none">📚 Dersler</button>
+      <button id="nb-cmp-stats"   onclick="gv('cmp-stats')"   style="display:none">📈 İstatistik</button>
     </nav>
     <div id="vw"></div>
   </div>
@@ -288,11 +289,12 @@ function fmtD(s){ var p=s.split("-"); return p[2]+"/"+p[1]+"/"+p[0]; }
 function parseYM(s){ return {y:parseInt(s),m:parseInt(s.slice(5))-1}; }
 function cw(t,c){ return Math.max(0,(t||0)-(c||0)); }
 function calcNet(c,w){ return c - w/NET_DIVISOR; }
-function fnet(n){ return Number.isInteger(n*4)?n:(Math.round(n*100)/100); }
+function fnet(n){ return Math.round(n*100)/100; }
 
 function availMonths(){
-  var res=[],y=2026,m=0,now=new Date();
-  while(y<now.getFullYear()||(y===now.getFullYear()&&m<=now.getMonth())){
+  // Başlangıç ayından (START) içinde bulunulan aya kadar, yıl sınırını (2027 vb.) kendiliğinden aşar
+  var res=[],y=parseInt(START),m=parseInt(START.slice(5))-1,now=parseYM(ymNow());
+  while(y<now.y||(y===now.y&&m<=now.m)){
     res.push(ym(y,m)); if(++m>11){m=0;y++;}
   }
   return res;
@@ -376,12 +378,31 @@ function showPicker(){
   // Detach old listeners
   if(recRef&&recListener) recRef.off("value",recListener);
   if(goalRef&&goalListener) goalRef.off("value",goalListener);
-  recs={}; goals={};
+  recs={}; goals={}; cmpRecs={};
+  curStudent=null; _teacherMode=false;
+  resetSessionUI();
   document.getElementById("app").style.display="none";
   document.getElementById("picker").style.display="flex";
 }
 
+// Önceki oturumdan kalan görünüm ve durumları sıfırlar (öğrenci/yönetici/öğretmen geçişinde)
+function resetSessionUI(){
+  var student=["daily","weekly","monthly","goals","stats"];
+  var admin=["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats"];
+  student.forEach(function(t){ var el=document.getElementById("nb-"+t); if(el){ el.style.display=""; el.className=t==="daily"?"act":""; } });
+  admin.forEach(function(t){ var el=document.getElementById("nb-"+t); if(el){ el.style.display="none"; el.className=""; } });
+  var pill=document.getElementById("ro-pill");
+  if(pill){ pill.style.display="none"; pill.textContent="👁️ Salt Okunur"; }
+  var ro=document.getElementById("ro-style"); if(ro&&!READONLY) ro.parentNode.removeChild(ro);
+  var av=document.getElementById("hdr-avatar");
+  if(av){ av.style.backgroundImage="none"; av.textContent=""; av.style.cursor="pointer"; av.onclick=openAvatarModal; }
+  Object.keys(_charts).forEach(function(k){ destroyChart(k); });
+  statsSelMonths=[]; statsInit=false; admSelMonths=[]; admInit=false; admStudent='omer'; expSubj=null; curView="daily";
+  document.getElementById("vw").innerHTML="";
+}
+
 function pickStudent(sid){
+  if(sid==="teacher"){ askPassword("teacher"); return; } // öğretmenin kendi verisi yok, önce öğrenci seçilir
   try{
     if(!db){
       try{var a2;try{a2=firebase.app();}catch(e){a2=firebase.initializeApp(FB_CFG);}db=firebase.database(a2);}
@@ -389,7 +410,8 @@ function pickStudent(sid){
     }
     if(recRef&&recListener)recRef.off("value",recListener);
     if(goalRef&&goalListener)goalRef.off("value",goalListener);
-    recs={}; goals={};
+    recs={}; goals={}; cmpRecs={};
+    resetSessionUI();
     selDate=today(); selMonth=ymNow(); selWeekStart=weekStart(today());
     expSubj=null;
     document.getElementById("picker").style.display="none";
@@ -402,7 +424,7 @@ function pickStudent(sid){
       document.getElementById("hdr-sub").textContent="👑";
       document.getElementById("hdr-name").textContent="Yönetici Paneli";
       document.getElementById("ro-pill").style.display="inline-flex";
-      ["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj"].forEach(function(t){
+      ["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats"].forEach(function(t){
         var el=document.getElementById("nb-"+t); if(el) el.style.display="flex";
       });
       ["daily","weekly","monthly","goals","stats"].forEach(function(t){
@@ -470,7 +492,7 @@ function syncState(s){
 }
 
 function saveField(sid,field,val){
-  if(!curStudent||READONLY)return;
+  if(!curStudent||READONLY||_teacherMode)return;
   val=Math.max(0,parseInt(val)||0);
   var cur=(recs[selDate]&&recs[selDate][sid])||{total:0,correct:0};
   var t=cur.total||0,c=cur.correct||0;
@@ -483,9 +505,11 @@ function saveField(sid,field,val){
   if(wEl)wEl.textContent=cw(t,c);
   var nEl=document.getElementById("nv-"+sid);
   if(nEl)nEl.textContent="Net: "+fnet(calcNet(c,cw(t,c)));
+  // Kayıt hedefi şimdi sabitlenir: 700 ms içinde öğrenci değişse bile veri doğru profile yazılır
+  var targetRef=recRef.child(selDate).child(sid);
   clearTimeout(saveTimers[sid]); syncState("saving");
   saveTimers[sid]=setTimeout(function(){
-    recRef.child(selDate).child(sid).set({total:t,correct:c})
+    targetRef.set({total:t,correct:c})
       .then(function(){syncState("ok");}).catch(function(){syncState("error");});
   },700);
 }
@@ -518,10 +542,20 @@ function getPrevMonth(ymStr){
   return y+"-"+pad(m+1);
 }
 
+// Hedef ekranında gezilebilen aylar: başlangıçtan LGS ayına kadar (gelecek aylara da hedef girilebilir)
+function goalMonths(){
+  var res=availMonths(), end=LGS_DATE.slice(0,7);
+  var last=parseYM(res[res.length-1]), y=last.y, m=last.m;
+  while(ym(y,m)<end){ if(++m>11){m=0;y++;} res.push(ym(y,m)); }
+  return res;
+}
+function gPrev(){var ms=goalMonths(),i=ms.indexOf(selMonth);if(i>0){selMonth=ms[i-1];renderGoals();}}
+function gNext(){var ms=goalMonths(),i=ms.indexOf(selMonth);if(i<ms.length-1){selMonth=ms[i+1];renderGoals();}}
+
 function carryGoalsIfEmpty(){
   // If current month has no goals set, copy from the most recent month that has goals
   if(goals[selMonth] && Object.keys(goals[selMonth]).length>0) return; // already has goals
-  var months=availMonths();
+  var months=goalMonths();
   var curIdx=months.indexOf(selMonth);
   for(var i=curIdx-1;i>=0;i--){
     var prevM=months[i];
@@ -558,13 +592,15 @@ function adjGoal(sid,field,delta){
 // ═══════════════════════════════════════════════════════════════════
 function gv(v){
   if(READONLY&&v==="goals") return;
+  // Hedef ekranında gelecek aya geçilmiş olabilir; diğer ekranlar bugünün ayına döner
+  if(v!=="goals"&&selMonth>ymNow()) selMonth=ymNow();
   curView=v; expSubj=null;
-  ["daily","weekly","monthly","goals","stats","cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj"].forEach(function(x){
+  ["daily","weekly","monthly","goals","stats","cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats"].forEach(function(x){
     var el=document.getElementById("nb-"+x); if(el) el.className=x===v?"act":"";
   });
   render();
 }
-function render(){ if(!db||!curStudent)return; var fn={daily:renderDaily,weekly:renderWeekly,monthly:renderMonthly,goals:renderGoals,stats:renderStats,"cmp-daily":renderCmpDaily,"cmp-weekly":renderCmpWeekly,"cmp-monthly":renderCmpMonthly,"cmp-all":renderCmpAll,"cmp-subj":renderCmpSubj}; (fn[curView]||renderDaily)(); updateHdr(); }
+function render(){ if(!db||!curStudent)return; var fn={daily:renderDaily,weekly:renderWeekly,monthly:renderMonthly,goals:renderGoals,stats:renderStats,"cmp-daily":renderCmpDaily,"cmp-weekly":renderCmpWeekly,"cmp-monthly":renderCmpMonthly,"cmp-all":renderCmpAll,"cmp-subj":renderCmpSubj,"cmp-stats":renderCmpStats}; (fn[curView]||renderDaily)(); updateHdr(); }
 
 function updateHdr(){
   var s=dstats(selDate);
@@ -640,7 +676,8 @@ function renderDaily(){
       +'</div></div>'+body+'</div>';
   });
   document.getElementById("vw").innerHTML=
-    streakWidget()
+    (curStudent==="omer"?lgsWidget():"")
+    +streakWidget()
     +'<div class="period-nav">'
     +'<button onclick="calPrev()">‹</button>'
     +'<span>'+MONTHS[p.m]+' '+p.y+'</span>'
@@ -668,8 +705,8 @@ function calPrev(){
 function calNext(){
   var p=parseYM(selDate.slice(0,7)),nm=p.m+1,ny=p.y;
   if(nm>11){nm=0;ny++;}
-  var now=new Date();
-  if(ny>now.getFullYear()||(ny===now.getFullYear()&&nm>now.getMonth()))return;
+  var now=parseYM(ymNow());
+  if(ny>now.y||(ny===now.y&&nm>now.m))return;
   selDate=ds(ny,nm,1);renderDaily();
 }
 
@@ -880,7 +917,7 @@ function renderGoals(){
   var globalAcc=(goals[selMonth]&&goals[selMonth]["__acc"])||0;
   var totalMs=mstats(selMonth);
   var overallAp=totalMs.total>0?parseFloat((totalMs.correct/totalMs.total*100).toFixed(2)):0;
-  var html='<div class="period-nav"><button onclick="mPrev()">‹</button><span>🎯 '+MONTHS[p.m]+' '+p.y+'</span><button onclick="mNext()">›</button></div>'
+  var html='<div class="period-nav"><button onclick="gPrev()">‹</button><span>🎯 '+MONTHS[p.m]+' '+p.y+'</span><button onclick="gNext()">›</button></div>'
     +'<div class="tip">💡 Hedefler bir önceki aydan otomatik aktarılır. İstediğiniz zaman değiştirebilirsiniz.</div>'
     +'<div class="card" style="border:2px solid #22c55e55;margin-bottom:10px">'
     +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'
@@ -927,10 +964,194 @@ function renderGoals(){
 }
 
 // ═══════════════════════════════════════════════════════════════════
+//  İSTATİSTİK: AY SEÇİMİ İLE DERS BAZINDA DOĞRU / YANLIŞ
+// ═══════════════════════════════════════════════════════════════════
+var statsSelMonths = []; // boş = tüm aylar
+
+function statsDataMonths(){
+  return availMonths().filter(function(m){ return mstats(m).total>0; });
+}
+function toggleStatsMonth(m){
+  var i=statsSelMonths.indexOf(m);
+  if(i>=0) statsSelMonths.splice(i,1); else statsSelMonths.push(m);
+  renderStats(); // üst kartlar, radar ve sıralama da seçime göre yenilenir
+}
+function setStatsMonths(list){ statsSelMonths=list; renderStats(); }
+
+// Varsayılan seçim: içinde bulunulan ay; o ayda veri yoksa veri olan son ay
+var statsInit = false;
+function defaultMonthSel(all){
+  var cur=ymNow();
+  if(all.indexOf(cur)>=0) return [cur];
+  return all.length?[all[all.length-1]]:[];
+}
+
+// Sayfanın en üstündeki ay-yıl seçim butonları
+function statsMonthPicker(){
+  var all=statsDataMonths();
+  var sel=statsSelMonths.filter(function(m){ return all.indexOf(m)>=0; });
+  return '<div class="card" style="padding:12px 14px"><div style="font-size:12px;font-weight:900;color:#333;margin-bottom:8px">🗓️ Ay Seçimi <span style="font-size:10px;color:#aaa;font-weight:700">· aşağıdaki tüm özetler seçilen aylara göre</span></div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    +'<button class="chart-tab'+(sel.length?'':' act')+'" onclick="setStatsMonths([])">Tümü</button>'
+    +all.map(function(m){
+      var p=parseYM(m);
+      return '<button class="chart-tab'+(sel.indexOf(m)>=0?' act':'')+'" onclick="toggleStatsMonth(\''+m+'\')">'+MONTHS[p.m]+' '+p.y+'</button>';
+    }).join("")+'</div></div>';
+}
+function refreshStatsMonthCard(){
+  var el=document.getElementById("sm-card");
+  if(el) el.outerHTML=statsMonthCard();
+  drawSmCharts();
+}
+var smMetric = 'acc'; // acc | wrong | net
+function setSmMetric(m){ smMetric=m; refreshStatsMonthCard(); }
+
+// Seçili ayları (seçim yoksa veri olan tüm ayları) döndürür
+function smUseMonths(){
+  var all=statsDataMonths();
+  var sel=statsSelMonths.filter(function(m){ return all.indexOf(m)>=0; });
+  return sel.length?sel:all;
+}
+function smLabel(m){ var p=parseYM(m); return MONTHS[p.m].slice(0,3)+" "+String(p.y).slice(2); }
+
+// Ders bazında doğru/yanlış oranı (yığılmış yatay çubuk) ve aylara göre değişim (çizgi) grafikleri.
+// Siyah-beyaz baskıda ayırt edilebilsin diye çizgiler farklı desen ve işaretçi kullanır.
+function drawSmCharts(){
+  var use=smUseMonths();
+  drawStackChart('sm-stack','smStack',use,mstats);
+  drawTrendChart('sm-trend','smTrend',use,smMetric,mstats);
+}
+
+// Ders bazında doğru/yanlış oranı (yığılmış yatay çubuk). statFn(ay, dersId) -> {total,correct,wrong,net}
+function drawStackChart(elId,key,use,statFn){
+  destroyChart(key);
+  var subs=SUBJ.map(function(sj){
+    var t=0,c=0,w=0;
+    use.forEach(function(m){ var x=statFn(m,sj.id); t+=x.total; c+=x.correct; w+=x.wrong; });
+    return {sj:sj,t:t,c:c,w:w};
+  }).filter(function(o){ return o.t>0; });
+  var el=document.getElementById(elId);
+  if(el&&subs.length){
+    _charts[key]=new Chart(el,{
+      type:'bar',
+      data:{labels:subs.map(function(o){return o.sj.n;}),datasets:[
+        {label:'Doğru %',data:subs.map(function(o){return parseFloat((o.c/o.t*100).toFixed(2));}),backgroundColor:'rgba(34,197,94,0.75)',borderColor:'#16a34a',borderWidth:1},
+        {label:'Yanlış %',data:subs.map(function(o){return parseFloat((o.w/o.t*100).toFixed(2));}),backgroundColor:'rgba(239,68,68,0.7)',borderColor:'#dc2626',borderWidth:1}
+      ]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'bottom',labels:{font:{family:'Nunito',size:10},boxWidth:10}},
+          tooltip:{callbacks:{label:function(c){var o=subs[c.dataIndex];return c.dataset.label+': '+c.parsed.x+' ('+(c.datasetIndex===0?o.c:o.w)+' / '+o.t+' soru)';}}}},
+        scales:{x:{stacked:true,min:0,max:100,ticks:{font:{family:'Nunito',size:9},callback:function(v){return v+'%';}},grid:{color:'#f3f4f6'}},
+                y:{stacked:true,ticks:{font:{family:'Nunito',size:10}},grid:{display:false}}}}
+    });
+  }
+}
+
+// Metrik değeri: acc = doğruluk %, wrong = yanlış %, net = net. Veri yoksa null.
+function metricVal(x,metric){
+  if(!x.total) return null;
+  if(metric==='acc') return parseFloat((x.correct/x.total*100).toFixed(2));
+  if(metric==='wrong') return parseFloat((x.wrong/x.total*100).toFixed(2));
+  return fnet(x.net);
+}
+var TREND_DASH=[[],[6,3],[2,2],[8,3,2,3],[],[6,3],[2,2]];
+var TREND_PTS=['circle','rect','triangle','rectRot','star','cross','crossRot'];
+
+// Dersler için aylara göre değişim çizgi grafiği. statFn(ay, dersId) -> {total,correct,wrong,net}
+function drawTrendChart(elId,key,use,metric,statFn){
+  destroyChart(key);
+  var el=document.getElementById(elId);
+  if(!el||use.length<2) return;
+  var ds=SUBJ.map(function(sj,i){
+    return {label:sj.n,data:use.map(function(m){return metricVal(statFn(m,sj.id),metric);}),
+      borderColor:sj.c,backgroundColor:sj.c,borderWidth:2,borderDash:TREND_DASH[i],pointStyle:TREND_PTS[i],pointRadius:4,tension:0.25,spanGaps:true};
+  }).filter(function(d){ return d.data.some(function(v){return v!==null;}); });
+  _charts[key]=lineChart(el,use.map(smLabel),ds,metric);
+}
+function lineChart(el,labels,ds,metric){
+  var yTitle=metric==='acc'?'Doğruluk %':metric==='wrong'?'Yanlış %':'Net';
+  return new Chart(el,{
+    type:'line',
+    data:{labels:labels,datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'bottom',labels:{font:{family:'Nunito',size:10},boxWidth:14,usePointStyle:true}}},
+      scales:{x:{grid:{display:false},ticks:{font:{family:'Nunito',size:9}}},
+              y:{grid:{color:'#f3f4f6'},ticks:{font:{family:'Nunito',size:9}},title:{display:true,text:yTitle,font:{size:9}},beginAtZero:metric!=='acc'}}}
+  });
+}
+// Seçili ayların kısa etiketi (seçim yoksa "Tüm aylar")
+function statsSelLabel(){
+  var all=statsDataMonths();
+  var sel=statsSelMonths.filter(function(m){ return all.indexOf(m)>=0; });
+  return sel.length?sel.map(smLabel).join(", "):"Tüm aylar";
+}
+function statsMonthCard(){
+  var all=statsDataMonths();
+  var sel=statsSelMonths.filter(function(m){ return all.indexOf(m)>=0; });
+  var use=sel.length?sel:all;
+  var rows="", gt=0, gc=0, gw=0;
+  SUBJ.forEach(function(sj){
+    var t=0,c=0,w=0,series=[];
+    use.forEach(function(m){
+      var x=mstats(m,sj.id); t+=x.total; c+=x.correct; w+=x.wrong;
+      if(x.total>0) series.push(x.correct/x.total*100);
+    });
+    if(!t) return;
+    gt+=t; gc+=c; gw+=w;
+    var pct=parseFloat((c/t*100).toFixed(2)), n=calcNet(c,w);
+    // Değişim: seçilen aylardaki ilk ve son veri olan ayın doğruluk farkı (yüzde puan)
+    var dl="";
+    if(series.length>1){
+      var dv=parseFloat((series[series.length-1]-series[0]).toFixed(2));
+      dl='<span style="font-size:11px;font-weight:900;color:'+(dv>0?"#16a34a":dv<0?"#ef4444":"#888")+'">'+(dv>0?"▲ +":dv<0?"▼ ":"= ")+dv+' puan</span>';
+    }
+    rows+='<div style="padding:10px 0;border-bottom:1px solid #f3f4f6">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'
+      +'<span style="font-size:18px">'+sj.e+'</span>'
+      +'<span style="flex:1;font-weight:800;font-size:13px;color:#333">'+sj.n+' '+dl+'</span>'
+      +'<span style="font-size:12px;font-weight:900;color:'+(n>=0?"#16a34a":"#ef4444")+'">Net '+fnet(n)+'</span></div>'
+      +'<div class="bar" style="height:8px"><div class="bg" style="width:'+pct+'%"></div><div class="br" style="width:'+(100-pct)+'%"></div></div>'
+      +'<div style="display:flex;gap:10px;margin-top:4px;font-size:11px;font-weight:700;flex-wrap:wrap">'
+      +'<span style="color:#888">📋'+t+'</span>'
+      +'<span style="color:#22c55e">✓'+c+'</span>'
+      +'<span style="color:#ef4444">✗'+w+'</span>'
+      +'<span style="color:'+sj.c+'">%'+pct+'</span></div></div>';
+  });
+  var gpct=gt>0?parseFloat((gc/gt*100).toFixed(2)):0, gn=calcNet(gc,gw);
+  var label=statsSelLabel();
+  return '<div class="card" id="sm-card">'
+    +'<div class="card-ttl" style="margin-bottom:8px">📚 Ders İstatistiği <span style="font-size:11px;color:#aaa;font-weight:700">· '+label+'</span></div>'
+    +(gt>0
+      ?'<div style="background:#EEF2FF;border-radius:12px;padding:10px 12px;margin-bottom:6px">'
+        +'<div style="font-size:10px;font-weight:800;color:var(--p);margin-bottom:4px">SEÇİLİ AYLARIN TOPLAMI</div>'
+        +'<div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;font-size:13px;font-weight:900">'
+        +'<span style="color:#555">📋 '+gt+' soru</span><span style="color:#22c55e">✓ '+gc+'</span><span style="color:#ef4444">✗ '+gw+'</span>'
+        +'<span style="color:#555">%'+gpct+'</span><span style="color:var(--p)">Net '+fnet(gn)+'</span></div></div>'
+        +rows
+        +'<div style="font-size:10px;color:#aaa;font-weight:700;margin-top:6px">▲▼ ilk ve son veri olan ay arasındaki doğruluk değişimi (yüzde puan)</div>'
+        +'<div class="card-ttl" style="font-size:13px;margin:16px 0 6px">📊 Ders Bazında Doğru / Yanlış Oranı</div>'
+        +'<div style="position:relative;height:'+(60+SUBJ.length*30)+'px"><canvas id="sm-stack"></canvas></div>'
+        +'<div class="card-ttl" style="font-size:13px;margin:16px 0 6px">📈 Aylara Göre Değişim</div>'
+        +'<div style="display:flex;gap:6px;margin-bottom:8px">'
+        +[['acc','Doğruluk %'],['wrong','Yanlış %'],['net','Net']].map(function(o){
+          return '<button class="chart-tab'+(smMetric===o[0]?' act':'')+'" onclick="setSmMetric(\''+o[0]+'\')">'+o[1]+'</button>';
+        }).join("")+'</div>'
+        +(use.length>1
+          ?'<div style="position:relative;height:260px"><canvas id="sm-trend"></canvas></div>'
+          :'<div style="font-size:12px;color:#aaa;font-weight:700;padding:14px 0">Değişim grafiği için en az 2 ay gerekir. Ay seçimini genişletin.</div>')
+        +'<div style="font-size:10px;color:#aaa;font-weight:700;margin-top:8px">Net = Doğru − Yanlış ÷ '+NET_DIVISOR+' (3 yanlış 1 doğruyu götürür)</div>'
+      :'<div class="empty" style="padding:16px"><div>Seçilen aylarda veri yok</div></div>')
+    +'</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════════
 //  STATS VIEW
 // ═══════════════════════════════════════════════════════════════════
 function renderStats(){
-  var allDays=Object.keys(recs).filter(function(d){return d>=START;}).sort();
+  // Üst kartlar, radar ve sıralama seçili aylara göre hesaplanır (seçim yoksa tüm aylar)
+  if(!statsInit){ statsSelMonths=defaultMonthSel(statsDataMonths()); statsInit=true; }
+  var selUse=smUseMonths();
+  var allDays=Object.keys(recs).filter(function(d){return d>=START&&selUse.indexOf(d.slice(0,7))>=0;}).sort();
   var sat=SUBJ.map(function(s){
     var t=allDays.reduce(function(a,d){return a+((recs[d]&&recs[d][s.id]&&recs[d][s.id].total)||0);},0);
     var c2=allDays.reduce(function(a,d){return a+((recs[d]&&recs[d][s.id]&&recs[d][s.id].correct)||0);},0);
@@ -988,8 +1209,10 @@ function renderStats(){
   });
 
   document.getElementById("vw").innerHTML=
-    // Top stats grid
-    '<div class="sgrid2">'
+    // Ay-yıl seçimi + seçili aylara göre üst özet kartları
+    statsMonthPicker()
+    +'<div style="font-size:11px;font-weight:800;color:#aaa;margin:0 2px 6px">'+statsSelLabel()+'</div>'
+    +'<div class="sgrid2">'
     +'<div style="background:linear-gradient(135deg,var(--p),var(--v));border-radius:18px;padding:16px;color:white;box-shadow:0 4px 20px #4F46E544"><div style="font-size:11px;opacity:.75;margin-bottom:4px">Toplam Soru</div><div style="font-size:34px;font-weight:900">'+gt+'</div></div>'
     +'<div style="background:linear-gradient(135deg,var(--a),#d97706);border-radius:18px;padding:16px;color:white;box-shadow:0 4px 20px #f59e0b44"><div style="font-size:11px;opacity:.75;margin-bottom:4px">Aktif Gün</div><div style="font-size:34px;font-weight:900">'+active+'</div></div>'
     +'<div style="background:linear-gradient(135deg,#22c55e,#16a34a);border-radius:18px;padding:16px;color:white;box-shadow:0 4px 20px #22c55e44"><div style="font-size:11px;opacity:.75;margin-bottom:4px">Toplam Doğru</div><div style="font-size:34px;font-weight:900">'+gc+'</div>'+(gt>0?'<div style="font-size:12px;opacity:.85">%'+Math.round((gc/gt)*100)+'</div>':"")+'</div>'
@@ -1001,8 +1224,9 @@ function renderStats(){
     +'<div style="font-size:34px;font-weight:900;color:var(--p)">'+fnet(gn)+'</div>'
     +'<div style="font-size:11px;color:#aaa;font-weight:700;margin-top:2px">= Doğru − Yanlış÷3</div></div>'
     +ring(gap,"var(--p)",70)+'</div>'
+    +statsMonthCard()
     // Radar chart (all subjects except Deneme)
-    +(gt>0?'<div class="card"><div class="card-ttl">🕸️ Ders Radar Analizi <span style="font-size:11px;color:#aaa;font-weight:600">(Deneme hariç)</span></div><div style="position:relative;height:280px"><canvas id="radarChart"></canvas></div></div>':"")
+    +(gt>0?'<div class="card"><div class="card-ttl">🕸️ Ders Radar Analizi <span style="font-size:11px;color:#aaa;font-weight:600">(Deneme hariç · '+statsSelLabel()+')</span></div><div style="position:relative;height:280px"><canvas id="radarChart"></canvas></div></div>':"")
     // Monthly line chart
     +(activeMonths.length>1?'<div class="card"><div class="card-ttl">📈 Aylık Net Gelişim</div><div class="chart-tabs" style="display:flex;gap:6px;margin-bottom:10px">'
       +'<button class="chart-tab act" onclick="switchLineChart(this,\'net\')">Net</button>'
@@ -1012,11 +1236,11 @@ function renderStats(){
     // Subject line chart per-month
     +(activeMonths.length>1?'<div class="card"><div class="card-ttl">📊 Aylık Ders Net Karşılaştırması</div><div style="position:relative;height:260px"><canvas id="subjectLineChart"></canvas></div></div>':"")
     // Rankings
-    +'<div class="card"><div class="card-ttl">🏆 Ders Sıralaması</div>'+(gt>0?rnk:'<div class="empty"><div style="font-size:44px;margin-bottom:10px">📭</div><div>Henüz veri yok</div></div>')+'</div>'
+    +'<div class="card"><div class="card-ttl">🏆 Ders Sıralaması <span style="font-size:11px;color:#aaa;font-weight:600">('+statsSelLabel()+')</span></div>'+(gt>0?rnk:'<div class="empty"><div style="font-size:44px;margin-bottom:10px">📭</div><div>Henüz veri yok</div></div>')+'</div>'
     +(mrows?'<div class="card"><div class="card-ttl">📅 Aylık Özet</div>'+mrows+'</div>':"")
     +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px">'
     +'<button class="btn-pdf" onclick="exportStatsPDF()">📄 Tüm İstatistik PDF</button></div>'
-    +'<div style="text-align:center;margin-top:8px;font-size:11px;color:#ccc;font-weight:700">1 Ocak 2026\'dan itibaren · Net = Doğru − Yanlış÷3</div>';
+    +'<div style="text-align:center;margin-top:8px;font-size:11px;color:#ccc;font-weight:700">Aylık gelişim grafikleri ve aylık özet tüm ayları gösterir · Net = Doğru − Yanlış÷3</div>';
 
   // Draw charts after DOM update
   if(gt>0) setTimeout(function(){ drawCharts(sat, activeMonths); }, 50);
@@ -1044,6 +1268,7 @@ function switchLineChart(btn, mode){
 
 function drawCharts(sat, activeMonths){
   drawRadarChart(sat);
+  drawSmCharts();
   if(activeMonths.length>1){
     drawLineChart(activeMonths, _lineMode);
     drawSubjectLineChart(activeMonths);
@@ -1583,7 +1808,7 @@ function dlTemplate(){
       ["3. Her ders için Toplam ve Doğru sayısını girin", "Yanlış otomatik hesaplanır"],
       ["4. Dosyayı kaydedin ve uygulamada Excel Yükle butonuna tıklayın"],
       [""],
-      ["Net Formülü", "Net = Doğru - Yanlış ÷ 4"],
+      ["Net Formülü", "Net = Doğru - Yanlış ÷ 3"],
       ["Başlangıç Tarihi", "2026-01-01 tarihinden önceki veriler kabul edilmez"],
     ];
     var ws0 = XLSXlib.utils.aoa_to_sheet(ws0data);
@@ -1767,7 +1992,7 @@ function uploadExcel(input){
 //  LGS GERİ SAYIM + STREAK + HAFTALIK HEDEF
 // ═══════════════════════════════════════════════════════════════════
 
-var LGS_DATE = "2026-06-13"; // LGS Tarihi — buradan değiştirin
+var LGS_DATE = "2027-06-12"; // LGS Tarihi — buradan değiştirin
 
 function daysUntilLGS(){
   var now = new Date(); now.setHours(0,0,0,0);
@@ -2045,8 +2270,8 @@ function cmpCalPrev(){
 function cmpCalNext(){
   var p=parseYM(selDate.slice(0,7)),nm=p.m+1,ny=p.y;
   if(nm>11){nm=0;ny++;}
-  var now=new Date();
-  if(ny>now.getFullYear()||(ny===now.getFullYear()&&nm>now.getMonth()))return;
+  var now=parseYM(ymNow());
+  if(ny>now.y||(ny===now.y&&nm>now.m))return;
   selDate=ds(ny,nm,1); renderCmpDaily();
 }
 
@@ -2234,6 +2459,128 @@ function allFromSid(r,sid){
 }
 
 function renderComparison(){ renderCmpDaily(); }
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADMIN VIEW 6 — İSTATİSTİK (ay seçimi, ders bazlı oran, aylık değişim)
+//  Ömer = recs, Zeynep = cmpRecs
+// ═══════════════════════════════════════════════════════════════════
+var admSelMonths = [], admStudent = 'omer', admMetric = 'acc';
+
+function admRecs(sid){ return sid==='omer'?recs:cmpRecs; }
+function admStat(sid){ var r=admRecs(sid); return function(m,subj){ return mstFrom(r,m,subj); }; }
+function admDataMonths(){
+  return availMonths().filter(function(m){ return mstFrom(recs,m).total>0||mstFrom(cmpRecs,m).total>0; });
+}
+function admUseMonths(){
+  var all=admDataMonths();
+  var sel=admSelMonths.filter(function(m){ return all.indexOf(m)>=0; });
+  return sel.length?sel:all;
+}
+function admToggleMonth(m){
+  var i=admSelMonths.indexOf(m);
+  if(i>=0) admSelMonths.splice(i,1); else admSelMonths.push(m);
+  renderCmpStats();
+}
+function admSetMonths(l){ admSelMonths=l; renderCmpStats(); }
+function admSetStudent(s){ admStudent=s; renderCmpStats(); }
+function admSetMetric(m){ admMetric=m; renderCmpStats(); }
+
+function admAgg(sid,months,subj){
+  var f=admStat(sid), t=0,c=0,w=0;
+  months.forEach(function(m){ var x=f(m,subj); t+=x.total; c+=x.correct; w+=x.wrong; });
+  return {total:t,correct:c,wrong:w,net:calcNet(c,w)};
+}
+// İlk ve son veri olan ay arasındaki doğruluk farkı (yüzde puan); en az 2 ay verisi yoksa boş
+function admDelta(sid,months,subj){
+  var f=admStat(sid), s=[];
+  months.forEach(function(m){ var v=metricVal(f(m,subj),'acc'); if(v!==null) s.push(v); });
+  if(s.length<2) return "";
+  var dv=parseFloat((s[s.length-1]-s[0]).toFixed(2));
+  return ' <span style="font-size:10px;font-weight:900;color:'+(dv>0?"#16a34a":dv<0?"#ef4444":"#888")+'">'+(dv>0?"▲ +":dv<0?"▼ ":"= ")+dv+'</span>';
+}
+
+var admInit = false;
+function renderCmpStats(){
+  if(!admInit){ admSelMonths=defaultMonthSel(admDataMonths()); admInit=true; }
+  var all=admDataMonths(), use=admUseMonths();
+  var sel=admSelMonths.filter(function(m){ return all.indexOf(m)>=0; });
+  var ost=STUDENTS.omer, zst=STUDENTS.zeynep;
+  var html=adminHeader("İstatistik","Ay seçimi, ders bazlı oran ve aylık değişim");
+
+  // Ay seçimi
+  html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:8px">🗓️ Ay Seçimi</div>'
+    +'<div style="font-size:11px;color:#aaa;font-weight:700;margin-bottom:8px">Bir veya birden fazla ay seçin. Seçim yoksa tüm aylar gösterilir.</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    +'<button class="chart-tab'+(sel.length?'':' act')+'" onclick="admSetMonths([])">Tümü</button>'
+    +all.map(function(m){
+      var p=parseYM(m);
+      return '<button class="chart-tab'+(sel.indexOf(m)>=0?' act':'')+'" onclick="admToggleMonth(\''+m+'\')">'+MONTHS[p.m]+' '+p.y+'</button>';
+    }).join("")+'</div></div>';
+
+  // İki öğrenci yan yana (seçili aylar toplamı)
+  html+=sideBySide(admAgg('omer',use),admAgg('zeynep',use));
+
+  // Ders bazlı tablo
+  html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:10px">📚 Ders Bazında Doğru / Yanlış</div>';
+  var any=false;
+  SUBJ.forEach(function(sj){
+    var o=admAgg('omer',use,sj.id), z=admAgg('zeynep',use,sj.id);
+    if(!o.total&&!z.total) return;
+    any=true;
+    function box(st,x,bg,tc,sid){
+      var pct=x.total>0?parseFloat((x.correct/x.total*100).toFixed(2)):0;
+      return '<div style="background:'+bg+';border-radius:8px;padding:6px 8px">'
+        +'<div style="font-size:9px;font-weight:800;color:'+tc+';margin-bottom:2px">'+st.emoji+' '+st.short+'</div>'
+        +'<div style="font-size:11px;font-weight:700;color:#555">'+x.total+' soru · %'+pct+(x.total?admDelta(sid,use,sj.id):'')+'</div>'
+        +'<div style="font-size:11px;font-weight:800"><span style="color:#22c55e">✓'+x.correct+'</span> <span style="color:#ef4444">✗'+x.wrong+'</span></div>'
+        +'<div style="font-size:13px;font-weight:900;color:'+(x.net>=0?"#22c55e":"#ef4444")+'">'+fnet(x.net)+' net</div></div>';
+    }
+    html+='<div style="padding:9px 0;border-bottom:1px solid #f3f4f6">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><span style="font-size:18px">'+sj.e+'</span><span style="font-size:12px;font-weight:900;color:#333">'+sj.n+'</span></div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'+box(ost,o,'#EEF2FF','#4F46E5','omer')+box(zst,z,'#FDF2F8','#DB2777','zeynep')+'</div></div>';
+  });
+  if(!any) html+='<div class="empty" style="padding:16px">Seçilen aylarda veri yok</div>';
+  else html+='<div style="font-size:10px;color:#aaa;font-weight:700;margin-top:6px">▲▼ ilk ve son veri olan ay arasındaki doğruluk değişimi (yüzde puan)</div>';
+  html+='</div>';
+
+  // Öğrenci seçimi + grafikler
+  var stBtn=function(sid,st){ return '<button class="chart-tab'+(admStudent===sid?' act':'')+'" onclick="admSetStudent(\''+sid+'\')">'+st.emoji+' '+st.short+'</button>'; };
+  var mBtns=[['acc','Doğruluk %'],['wrong','Yanlış %'],['net','Net']].map(function(o){
+    return '<button class="chart-tab'+(admMetric===o[0]?' act':'')+'" onclick="admSetMetric(\''+o[0]+'\')">'+o[1]+'</button>';
+  }).join("");
+  html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:8px">📊 Öğrenci Bazında Ders Grafikleri</div>'
+    +'<div style="display:flex;gap:6px;margin-bottom:10px">'+stBtn('omer',ost)+stBtn('zeynep',zst)+'</div>'
+    +'<div style="font-size:12px;font-weight:800;color:#555;margin-bottom:4px">Doğru / Yanlış Oranı</div>'
+    +'<div style="position:relative;height:'+(60+SUBJ.length*30)+'px"><canvas id="adm-stack"></canvas></div>'
+    +'<div style="font-size:12px;font-weight:800;color:#555;margin:16px 0 6px">Aylara Göre Değişim</div>'
+    +'<div style="display:flex;gap:6px;margin-bottom:8px">'+mBtns+'</div>'
+    +(use.length>1?'<div style="position:relative;height:260px"><canvas id="adm-trend"></canvas></div>'
+      :'<div style="font-size:12px;color:#aaa;font-weight:700;padding:14px 0">Değişim grafiği için en az 2 ay gerekir.</div>')
+    +'</div>';
+
+  html+='<div class="card"><div class="card-ttl" style="font-size:13px;margin-bottom:8px">👦👧 İki Öğrenci, Aylık Genel Değişim</div>'
+    +(use.length>1?'<div style="position:relative;height:240px"><canvas id="adm-both"></canvas></div>'
+      :'<div style="font-size:12px;color:#aaa;font-weight:700;padding:14px 0">Değişim grafiği için en az 2 ay gerekir.</div>')
+    +'<div style="font-size:10px;color:#aaa;font-weight:700;margin-top:8px">Metrik seçimi yukarıdaki düğmelerle aynıdır · Net = Doğru − Yanlış ÷ '+NET_DIVISOR+'</div></div>';
+
+  document.getElementById("vw").innerHTML=html;
+  setTimeout(function(){ drawAdmStatsCharts(); },30);
+}
+
+function drawAdmStatsCharts(){
+  var use=admUseMonths();
+  drawStackChart('adm-stack','admStack',use,admStat(admStudent));
+  drawTrendChart('adm-trend','admTrend',use,admMetric,admStat(admStudent));
+  destroyChart('admBoth');
+  var el=document.getElementById('adm-both');
+  if(!el||use.length<2) return;
+  var mk=function(sid,color,dash,pt){
+    var f=admStat(sid);
+    return {label:STUDENTS[sid].short,data:use.map(function(m){return metricVal(f(m),admMetric);}),
+      borderColor:color,backgroundColor:color,borderWidth:2.5,borderDash:dash,pointStyle:pt,pointRadius:5,tension:0.25,spanGaps:true};
+  };
+  _charts['admBoth']=lineChart(el,use.map(smLabel),[mk('omer','#4F46E5',[],'circle'),mk('zeynep','#DB2777',[6,3],'rect')],admMetric);
+}
 function cmpCard(){}  // legacy stub
 function bigCmpCard(){ return ""; } // legacy stub
 
@@ -2304,7 +2651,7 @@ function generateBackupExcel(allData){
       Object.keys(r).forEach(function(d){
         subjIds.forEach(function(s){ t+=(r[d][s]&&r[d][s].total)||0; corr+=(r[d][s]&&r[d][s].correct)||0; });
       });
-      var w=t-corr; var net=Math.round((corr-w/4)*100)/100;
+      var w=t-corr; var net=Math.round(calcNet(corr,w)*100)/100;
       sumRows.push([STUDENTS[sid].name, t, corr, w, net, activeDays]);
     });
     var ws0 = XLSXlib.utils.aoa_to_sheet(sumRows);
@@ -2621,12 +2968,13 @@ function drawAdmAllBar(){
 var _pwTarget = null;
 
 function askPassword(sid){
-  if(READONLY){ pickStudent(sid); return; }
-  // Teacher: no password, show student picker modal
+  // Öğretmen: şifre yok, önce öğrenci seçtirilir (görüntüleme modunda da)
   if(sid==="teacher"){
     document.getElementById("teacher-modal").style.display="flex";
     return;
   }
+  _teacherMode = false;
+  if(READONLY){ pickStudent(sid); return; }
   _pwTarget = sid;
   var st = STUDENTS[sid];
   var avatarEl = document.getElementById("pw-avatar");
