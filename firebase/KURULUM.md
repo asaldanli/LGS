@@ -55,8 +55,8 @@ Yayından sonra dört hesapla da giriş yapıp kontrol edin:
 Realtime Database > **Rules**. Önce mevcut kuralları bir yere kopyalayın (geri dönüş için).
 `database.rules.json` dosyasının içeriğini yapıştırıp **Publish** edin.
 
-Not: `yds-vocabulary` bölümü şimdilik herkese açık bırakıldı, çünkü bu uygulamanın durumu belli değil.
-Bu bölüm silinirse veya kısıtlanırsa o uygulama çalışmaz. Karar verildiğinde bu bölüm güncellenmelidir.
+Not: Aynı veritabanındaki kullanılmayan `yds-vocabulary` uygulamasının verisi yedeklenip kuraldan çıkarıldı.
+Kuralda yer almayan hiçbir yola istemci erişemez. Bu uygulama yeniden kullanılacaksa kendi kuralları eklenmelidir.
 
 Rules Playground ile (Simulate) kontrol edin:
 

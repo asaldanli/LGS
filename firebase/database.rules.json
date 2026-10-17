@@ -71,10 +71,6 @@
           ".validate": "newData.isString() && newData.val().length < 150000"
         }
       }
-    },
-    "yds-vocabulary": {
-      ".read": true,
-      ".write": true
     }
   }
 }
