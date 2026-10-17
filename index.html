@@ -387,8 +387,16 @@ window.addEventListener("DOMContentLoaded", function(){
     db = firebase.database(app);
     db.ref(".info/connected").on("value",function(s){ syncState(s.val()?"ok":"saving"); });
     // Oturum yalnızca bu sekmede tutulur; sayfa açılışında her zaman çıkış yapılmış başlanır
+    // Öğretmen bağlantısı (?o=şifre): şifre adres çubuğundan hemen silinir, giriş otomatik yapılır
+    var linkPw = (new URLSearchParams(window.location.search)).get("o");
+    if(linkPw!==null){
+      try{ history.replaceState(null,"",window.location.pathname+(READONLY?"?izle":"")); }catch(e){}
+    }
     firebase.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION)
-      .catch(function(){}).then(function(){ authSignOut(); });
+      .catch(function(){})
+      .then(function(){ return firebase.auth().signOut(); })
+      .catch(function(){})
+      .then(function(){ if(linkPw) teacherLinkLogin(linkPw); });
     // Show picker
     document.getElementById("picker").style.display="flex";
     document.getElementById("app").style.display="none";
@@ -401,17 +409,35 @@ window.addEventListener("DOMContentLoaded", function(){
   }catch(e){ console.error(e); }
 });
 
+// Gizli öğretmen bağlantısı: şifreyi yazdırmadan öğretmen hesabıyla girer ve öğrenci seçtirir
+function teacherLinkLogin(pw){
+  var sub=document.getElementById("pick-sub");
+  var normal=READONLY?"Hangi öğrenciyi görüntülemek istiyorsunuz?":"Hangi öğrencinin takibini yapıyorsunuz?";
+  if(sub) sub.textContent="Öğretmen girişi yapılıyor...";
+  authSignIn("teacher",pw).then(function(){
+    if(sub) sub.textContent=normal;
+    _teacherMode=false;
+    loadProfilePics();
+    document.getElementById("teacher-modal").style.display="flex";
+  }).catch(function(e){
+    if(sub) sub.textContent="Bağlantı geçersiz ya da süresi dolmuş. Öğretmen şifresiyle giriş yapabilirsiniz.";
+    console.warn("Öğretmen bağlantısı: "+authErrMsg(e));
+  });
+}
+
 function showPicker(){
   // Detach old listeners
   if(recRef&&recListener) recRef.off("value",recListener);
   if(goalRef&&goalListener) goalRef.off("value",goalListener);
   recs={}; goals={}; cmpRecs={};
+  var wasTeacher=_teacherMode;
   curStudent=null; _teacherMode=false;
-  authSignOutSoon();
+  if(!wasTeacher) authSignOutSoon(); // öğretmen oturumu açık kalır, diğer öğrenciyi şifresiz seçebilsin
   resetSessionUI();
   ["omer","zeynep"].forEach(function(sid){ applyAvatar(sid,PROFILE_PICS[sid]); }); // oturumda yüklenmiş resimler
   document.getElementById("app").style.display="none";
   document.getElementById("picker").style.display="flex";
+  if(wasTeacher) document.getElementById("teacher-modal").style.display="flex";
 }
 
 // Önceki oturumdan kalan görünüm ve durumları sıfırlar (öğrenci/yönetici/öğretmen geçişinde)

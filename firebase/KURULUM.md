@@ -38,6 +38,18 @@ Yayından sonra dört hesapla da giriş yapıp kontrol edin:
 - Yönetici: karşılaştırma sekmeleri geliyor. Giriş ekranındaki "Tüm Verileri Yedekle" çalışıyor.
 - `?izle` bağlantısı: şifre olarak öğretmen şifresi istenir.
 
+## Öğretmen için gizli bağlantı
+
+Öğretmenin şifre yazmaması için şifresi bir bağlantıya konabilir:
+
+`https://asaldanli.github.io/LGS/?o=ÖĞRETMEN_ŞİFRESİ`
+
+- Bağlantı açılınca uygulama şifreyi adres çubuğundan siler, öğretmen hesabıyla otomatik giriş yapar ve öğrenci seçimini açar.
+- Öğretmen yer imine veya ana ekrana ekleyebilir. Öğretmen modunda "Değiştir" öğrenci seçimine döner, şifre sormaz.
+- Şifrede harf ve rakam dışında karakter varsa adrese eklerken kodlanmalıdır (örneğin `&` yerine `%26`). Harf ve rakamdan oluşan bir şifre bunu gerektirmez.
+- Bağlantı yalnızca öğretmene gönderilmeli, herkese açık bir yere yazılmamalıdır. Sızarsa konsolda `teacher@lgs.local` şifresi değiştirilir, eski bağlantı geçersiz olur.
+- Bağlantısız girişte öğretmen şifresiyle de girilebilir.
+
 ## 4. Kuralları uygula (konsol)
 
 Realtime Database > **Rules**. Önce mevcut kuralları bir yere kopyalayın (geri dönüş için).
