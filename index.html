@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" onerror="fbLoadErr()"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onerror="fbLoadErr()"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" onerror="fbLoadErr()"></script>
 <script>function fbLoadErr(){document.body.innerHTML='<div style="font-family:sans-serif;text-align:center;padding:60px 20px"><div style="font-size:48px;margin-bottom:16px">⚠️</div><h2 style="color:#ef4444;margin-bottom:12px">Firebase yüklenemedi</h2><p style="color:#666;max-width:360px;margin:0 auto 20px">İnternet bağlantınızı kontrol edin ve sayfayı yenileyin.</p><button onclick="location.reload()" style="padding:12px 28px;background:#4F46E5;color:white;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer">🔄 Yenile</button></div>';}</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -225,17 +226,41 @@ var STUDENTS = {
   admin:  {name:"Arif Saldanlı",         short:"Yönetici",    emoji:"👑", grad:"linear-gradient(135deg,#d97706,#b45309)"},
   teacher:{name:"Öğretmen",              short:"Öğretmen",    emoji:"👩‍🏫", grad:"linear-gradient(135deg,#0891b2,#0e7490)"}
 };
-// ── ŞİFRELER — teacher şifresiz (boş string) ──
-var PASSWORDS = {
-  omer:    "XXXXXX",
-  zeynep:  "XXXXXX",
-  admin:   "XXXXXX",
-  teacher: ""
+// ── GİRİŞ: şifreler kodda tutulmaz, Firebase Authentication doğrular ──
+// Hesap e-postaları Firebase konsolundaki kullanıcılarla birebir aynı olmalıdır. Kurulum: firebase/KURULUM.md
+// Öğrenci ve öğretmen hesapları posta kutusu olmayan takma adreslerdir (gerçek adresler herkese açık kodda yer almasın diye)
+var AUTH_EMAILS = {
+  omer:    "omer@lgs.local",
+  zeynep:  "zeynep@lgs.local",
+  teacher: "teacher@lgs.local",
+  admin:   "saldanli@istanbul.edu.tr"
 };
+function authEmail(who){ return AUTH_EMAILS[who]; }
+var _authTok = 0; // yeni bir giriş, bekleyen gecikmeli çıkışı iptal eder
+function authSignIn(who,pw){
+  if(!pw) return Promise.reject({code:"auth/missing-password"});
+  _authTok++;
+  return firebase.auth().signInWithEmailAndPassword(authEmail(who),pw);
+}
+function authSignOut(){ try{ firebase.auth().signOut(); }catch(e){} }
+// Bekleyen kayıtların (700 ms gecikmeli) yazılabilmesi için çıkış kısa süre sonra yapılır
+function authSignOutSoon(){
+  var tok=++_authTok;
+  setTimeout(function(){ if(tok===_authTok) authSignOut(); },1500);
+}
+function authErrMsg(e){
+  var c=(e&&e.code)||"";
+  if(c==="auth/missing-password") return "Şifreyi girin.";
+  if(c==="auth/wrong-password"||c==="auth/invalid-credential"||c==="auth/user-not-found"||c==="auth/invalid-login-credentials") return "Yanlış şifre, tekrar deneyin.";
+  if(c==="auth/too-many-requests") return "Çok fazla deneme yapıldı. Biraz bekleyip tekrar deneyin.";
+  if(c==="auth/network-request-failed") return "İnternet bağlantısı yok.";
+  if(c==="auth/operation-not-allowed"||c==="auth/configuration-not-found") return "Firebase'de e-posta/şifre girişi henüz açılmamış (firebase/KURULUM.md).";
+  return "Giriş yapılamadı"+(c?" ("+c+")":".");
+}
+// Görüntüleme bağlantısında (?izle) öğrenci girişleri de salt okunur öğretmen hesabıyla yapılır
+function authWho(target){ return (READONLY&&(target==="omer"||target==="zeynep"))?"teacher":target; }
 // Profil resimleri (Firebase'den yüklenir)
 var PROFILE_PICS = { omer: null, zeynep: null };
-
-var BACKUP_PASSWORD = "XXXXXX";
 
 var SUBJ = [
   {id:"matematik", n:"Matematik",      e:"📐",c:"#FF6B6B",bg:"#FFF0F0",li:"#FFE0E0"},
@@ -361,11 +386,13 @@ window.addEventListener("DOMContentLoaded", function(){
     var app; try{app=firebase.app();}catch(e){app=firebase.initializeApp(FB_CFG);}
     db = firebase.database(app);
     db.ref(".info/connected").on("value",function(s){ syncState(s.val()?"ok":"saving"); });
+    // Oturum yalnızca bu sekmede tutulur; sayfa açılışında her zaman çıkış yapılmış başlanır
+    firebase.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION)
+      .catch(function(){}).then(function(){ authSignOut(); });
     // Show picker
     document.getElementById("picker").style.display="flex";
     document.getElementById("app").style.display="none";
-    // Pre-load profile pics for picker display
-    if(db) loadProfilePicsForPicker();
+    // Profil resimleri giriş yapıldıktan sonra yüklenir (veritabanı girişsiz okunamaz)
     if(READONLY){
       document.getElementById("readonly-badge").style.display="block";
       document.getElementById("pick-sub").textContent="Hangi öğrenciyi görüntülemek istiyorsunuz?";
@@ -380,7 +407,9 @@ function showPicker(){
   if(goalRef&&goalListener) goalRef.off("value",goalListener);
   recs={}; goals={}; cmpRecs={};
   curStudent=null; _teacherMode=false;
+  authSignOutSoon();
   resetSessionUI();
+  ["omer","zeynep"].forEach(function(sid){ applyAvatar(sid,PROFILE_PICS[sid]); }); // oturumda yüklenmiş resimler
   document.getElementById("app").style.display="none";
   document.getElementById("picker").style.display="flex";
 }
@@ -1959,24 +1988,27 @@ function uploadExcel(input){
       );
       if(!ok){ msg.innerHTML="<span style=\"color:#aaa\">İptal edildi.</span>"; return; }
 
-      // Write to Firebase — merge (don't overwrite existing)
-      var targetRef = db.ref("records/"+targetStudent);
-      var writeCount = 0;
-      var keys = Object.keys(batch);
-      keys.forEach(function(dateKey){
-        var dayRef = targetRef.child(dateKey);
-        // Use update (merge) not set (overwrite)
-        dayRef.update(batch[dateKey]).then(function(){
-          writeCount++;
-          if(writeCount === keys.length){
-            msg.innerHTML = '<span style="color:#22c55e">✅ '+imported+' gün başarıyla yüklendi!</span>';
-            // Auto-select the student and open app
-            setTimeout(function(){ pickStudent(targetStudent); },1200);
-          }
-        }).catch(function(e){
-          msg.innerHTML = '<span style="color:#ef4444">❌ Yükleme hatası: '+e.message+'</span>';
+      // Veritabanına yazma yetkisi yönetici hesabındadır; şifre sorulur
+      withAdmin(function(){
+        // Write to Firebase — merge (don't overwrite existing)
+        var targetRef = db.ref("records/"+targetStudent);
+        var writeCount = 0;
+        var keys = Object.keys(batch);
+        keys.forEach(function(dateKey){
+          var dayRef = targetRef.child(dateKey);
+          // Use update (merge) not set (overwrite)
+          dayRef.update(batch[dateKey]).then(function(){
+            writeCount++;
+            if(writeCount === keys.length){
+              msg.innerHTML = '<span style="color:#22c55e">✅ '+imported+' gün başarıyla yüklendi! Öğrenci girişinden görebilirsiniz.</span>';
+              authSignOut();
+            }
+          }).catch(function(e){
+            msg.innerHTML = '<span style="color:#ef4444">❌ Yükleme hatası: '+e.message+'</span>';
+            authSignOut();
+          });
         });
-      });
+      }, function(t,c){ msg.innerHTML='<span style="color:'+c+'">'+t+'</span>'; });
 
     }catch(err){
       msg.innerHTML = '<span style="color:#ef4444">❌ Dosya okunamadı: '+err.message+'</span>';
@@ -2594,29 +2626,34 @@ var _backupPending = false;
 
 function backupAndSend(){
   if(_backupPending) return;
-  // Ask for password
-  var pw = prompt("Yedekleme şifresi:");
-  if(pw === null) return;
-  if(pw !== BACKUP_PASSWORD){
-    setBackupMsg("❌ Yanlış şifre.","#ef4444");
-    return;
-  }
-  _backupPending = true;
-  setBackupMsg("⏳ Veriler toplanıyor...","#f59e0b");
-  if(!db){ setBackupMsg("❌ Veritabanı bağlantısı yok.","#ef4444"); _backupPending=false; return; }
-
-  var allData = {omer:{}, zeynep:{}};
-  var loaded = 0;
-  ["omer","zeynep"].forEach(function(sid){
-    db.ref("records/"+sid).once("value", function(snap){
-      allData[sid] = snap.val()||{};
-      loaded++;
-      if(loaded===2) generateBackupExcel(allData);
-    }, function(){
-      loaded++;
-      if(loaded===2) generateBackupExcel(allData);
+  if(!db){ setBackupMsg("❌ Veritabanı bağlantısı yok.","#ef4444"); return; }
+  // Okuma yetkisi yönetici hesabındadır; şifre sorulur
+  withAdmin(function(){
+    _backupPending = true;
+    setBackupMsg("⏳ Veriler toplanıyor...","#f59e0b");
+    var allData = {omer:{}, zeynep:{}};
+    var loaded = 0, failed = false;
+    ["omer","zeynep"].forEach(function(sid){
+      db.ref("records/"+sid).once("value", function(snap){
+        allData[sid] = snap.val()||{};
+        if(++loaded===2 && !failed){ generateBackupExcel(allData); authSignOut(); }
+      }, function(err){
+        // Okunamayan veriyle boş yedek üretilmez
+        if(!failed){
+          failed = true; _backupPending = false; authSignOut();
+          setBackupMsg("❌ Veri okunamadı: "+((err&&err.message)||"izin yok"),"#ef4444");
+        }
+      });
     });
-  });
+  }, setBackupMsg);
+}
+
+// Yönetici şifresiyle giriş yapar (yedek ve Excel yükleme için); başarılıysa cb çalışır
+function withAdmin(cb, onMsg){
+  var pw = prompt("Yönetici şifresi:");
+  if(pw === null){ onMsg("İptal edildi.","#aaa"); return; }
+  onMsg("⏳ Giriş yapılıyor...","#f59e0b");
+  authSignIn("admin",pw).then(cb).catch(function(e){ onMsg("❌ "+authErrMsg(e),"#ef4444"); });
 }
 
 function setBackupMsg(msg, color){
@@ -2700,17 +2737,8 @@ function generateBackupExcel(allData){
 // ═══════════════════════════════════════════════════════════════════
 var _avatarPendingData = null; // base64 string waiting to save
 
-function loadProfilePicsForPicker(){
-  if(!db) return;
-  ["omer","zeynep"].forEach(function(sid){
-    db.ref("profiles/"+sid+"/avatar").once("value",function(snap){
-      var b64=snap.val(); PROFILE_PICS[sid]=b64||null; applyAvatar(sid,b64);
-    });
-  });
-}
-
 function loadProfilePics(){
-  if(!db||!curStudent) return;
+  if(!db) return;
   ["omer","zeynep"].forEach(function(sid){
     db.ref("profiles/"+sid+"/avatar").once("value",function(snap){
       var b64 = snap.val();
@@ -2967,14 +2995,10 @@ function drawAdmAllBar(){
 // ── ŞİFRE MODAL FONKSİYONLARI ──────────────────────────────────────
 var _pwTarget = null;
 
+var _pwBusy = false;
 function askPassword(sid){
-  // Öğretmen: şifre yok, önce öğrenci seçtirilir (görüntüleme modunda da)
-  if(sid==="teacher"){
-    document.getElementById("teacher-modal").style.display="flex";
-    return;
-  }
+  // Her hesap şifre sorar. Öğretmen girişinden sonra önce öğrenci seçtirilir (pwSubmit)
   _teacherMode = false;
-  if(READONLY){ pickStudent(sid); return; }
   _pwTarget = sid;
   var st = STUDENTS[sid];
   var avatarEl = document.getElementById("pw-avatar");
@@ -2983,7 +3007,7 @@ function askPassword(sid){
   document.getElementById("pw-input").value = "";
   document.getElementById("pw-err").textContent = "";
   var btn = document.getElementById("pw-btn");
-  var grads = {omer:"linear-gradient(135deg,#4F46E5,#7C3AED)",zeynep:"linear-gradient(135deg,#DB2777,#9D174D)",admin:"linear-gradient(135deg,#d97706,#b45309)"};
+  var grads = {omer:"linear-gradient(135deg,#4F46E5,#7C3AED)",zeynep:"linear-gradient(135deg,#DB2777,#9D174D)",admin:"linear-gradient(135deg,#d97706,#b45309)",teacher:"linear-gradient(135deg,#0891b2,#0e7490)"};
   btn.style.background = grads[sid]||grads.omer;
   var inp = document.getElementById("pw-input");
   inp.style.borderColor = "#e5e7eb";
@@ -3029,14 +3053,25 @@ function togglePwVis(){
 }
 
 function pwSubmit(){
-  if(!_pwTarget) return;
+  if(!_pwTarget||_pwBusy) return;
+  var target = _pwTarget;
   var val = document.getElementById("pw-input").value;
-  if(val === PASSWORDS[_pwTarget]){
+  var btn = document.getElementById("pw-btn");
+  _pwBusy = true; btn.disabled = true; btn.style.opacity = ".6";
+  authSignIn(authWho(target), val).then(function(){
     document.getElementById("pw-modal").style.display = "none";
-    pickStudent(_pwTarget);
-  } else {
-    pwErr(true);
-  }
+    _pwTarget = null;
+    if(target==="teacher"){
+      loadProfilePics();
+      document.getElementById("teacher-modal").style.display = "flex";
+    } else {
+      pickStudent(target);
+    }
+  }).catch(function(e){
+    pwErr(true, authErrMsg(e));
+  }).then(function(){
+    _pwBusy = false; btn.disabled = false; btn.style.opacity = "";
+  });
 }
 
 // Close on backdrop click

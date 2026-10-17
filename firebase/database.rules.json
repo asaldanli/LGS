@@ -1,0 +1,80 @@
+{
+  "rules": {
+    "records": {
+      "omer": {
+        ".read": "auth != null && (auth.token.email === 'omer@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr' || auth.token.email === 'teacher@lgs.local')",
+        ".write": "auth != null && (auth.token.email === 'omer@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr')",
+        "$date": {
+          ".validate": "$date.matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)",
+          "$subj": {
+            ".validate": "$subj.matches(/^(matematik|turkce|fen|sosyal|ingilizce|din|deneme)$/) && newData.hasChildren(['total', 'correct'])",
+            "total": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3000" },
+            "correct": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= newData.parent().child('total').val()" },
+            "$other": { ".validate": false }
+          }
+        }
+      },
+      "zeynep": {
+        ".read": "auth != null && (auth.token.email === 'zeynep@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr' || auth.token.email === 'teacher@lgs.local')",
+        ".write": "auth != null && (auth.token.email === 'zeynep@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr')",
+        "$date": {
+          ".validate": "$date.matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)",
+          "$subj": {
+            ".validate": "$subj.matches(/^(matematik|turkce|fen|sosyal|ingilizce|din|deneme)$/) && newData.hasChildren(['total', 'correct'])",
+            "total": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3000" },
+            "correct": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= newData.parent().child('total').val()" },
+            "$other": { ".validate": false }
+          }
+        }
+      }
+    },
+    "goals": {
+      "omer": {
+        ".read": "auth != null && (auth.token.email === 'omer@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr' || auth.token.email === 'teacher@lgs.local')",
+        ".write": "auth != null && (auth.token.email === 'omer@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr')",
+        "$month": {
+          ".validate": "$month.matches(/^([0-9]{4}-[0-9]{2}|__weeklyGoal)$/)",
+          "__acc": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+          "$subj": {
+            ".validate": "$subj.matches(/^(matematik|turkce|fen|sosyal|ingilizce|din|deneme)$/)",
+            "targetTotal": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "targetAccuracy": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" }
+          }
+        }
+      },
+      "zeynep": {
+        ".read": "auth != null && (auth.token.email === 'zeynep@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr' || auth.token.email === 'teacher@lgs.local')",
+        ".write": "auth != null && (auth.token.email === 'zeynep@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr')",
+        "$month": {
+          ".validate": "$month.matches(/^([0-9]{4}-[0-9]{2}|__weeklyGoal)$/)",
+          "__acc": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+          "$subj": {
+            ".validate": "$subj.matches(/^(matematik|turkce|fen|sosyal|ingilizce|din|deneme)$/)",
+            "targetTotal": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "targetAccuracy": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" }
+          }
+        }
+      }
+    },
+    "profiles": {
+      "omer": {
+        "avatar": {
+          ".read": "auth != null",
+          ".write": "auth != null && (auth.token.email === 'omer@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr')",
+          ".validate": "newData.isString() && newData.val().length < 150000"
+        }
+      },
+      "zeynep": {
+        "avatar": {
+          ".read": "auth != null",
+          ".write": "auth != null && (auth.token.email === 'zeynep@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr')",
+          ".validate": "newData.isString() && newData.val().length < 150000"
+        }
+      }
+    },
+    "yds-vocabulary": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}
