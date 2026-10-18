@@ -598,11 +598,141 @@ function saveField(sid,field,val){
   if(nEl)nEl.textContent="Net: "+fnet(calcNet(c,cw(t,c)));
   // Kayıt hedefi şimdi sabitlenir: 700 ms içinde öğrenci değişse bile veri doğru profile yazılır
   var targetRef=recRef.child(selDate).child(sid);
+  var dateAtEdit=selDate, studentAtEdit=curStudent;
   clearTimeout(saveTimers[sid]); syncState("saving");
   saveTimers[sid]=setTimeout(function(){
     targetRef.set({total:t,correct:c})
-      .then(function(){syncState("ok");}).catch(function(){syncState("error");});
+      .then(function(){
+        syncState("ok");
+        // Kayıt başarılı olunca rekor kontrolü (öğrenci bu arada değiştiyse atlanır)
+        if(curStudent===studentAtEdit) checkAchievements(dateAtEdit,sid);
+      }).catch(function(){syncState("error");});
   },700);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  BAŞARI / REKOR BİLDİRİMİ (popup + ses)
+//  Bir dersin ya da günlük toplamın, aynı ay veya yıldaki diğer tüm günlerin en yükseğini aşması
+// ═══════════════════════════════════════════════════════════════════
+// Hesap saf bir fonksiyondur: r = kayıtlar, d = düzenlenen gün, sid = ders (null ise günlük toplam)
+function dayCount(r,d,sid){
+  var x=r[d]; if(!x) return 0;
+  if(sid) return (x[sid]&&x[sid].total)||0;
+  var t=0; SUBJ.forEach(function(s){ t+=(x[s.id]&&x[s.id].total)||0; }); return t;
+}
+// Dönüş: {level:"year"|"month", value, prev} ya da null. Önceki veri yoksa (ilk gün) rekor sayılmaz.
+function recordLevel(r,d,sid){
+  var val=dayCount(r,d,sid); if(val<=0) return null;
+  var ymKey=d.slice(0,7), yKey=d.slice(0,4), prevM=0, prevY=0;
+  Object.keys(r).forEach(function(k){
+    if(k===d||k<START) return;
+    var v=dayCount(r,k,sid); if(!v) return;
+    if(k.slice(0,4)===yKey){ if(v>prevY) prevY=v; if(k.slice(0,7)===ymKey&&v>prevM) prevM=v; }
+  });
+  if(prevY>0&&val>prevY) return {level:"year",value:val,prev:prevY};
+  if(prevM>0&&val>prevM) return {level:"month",value:val,prev:prevM};
+  return null;
+}
+// Kutlanan seviyeler cihazda tutulur (sayfa yenilenince ya da yeniden düzenlenince tekrar çıkmasın)
+function celebratedStore(){
+  try{ return JSON.parse(localStorage.getItem("lgs_kutlama_"+curStudent)||"{}"); }catch(e){ return {}; }
+}
+function saveCelebrated(st){
+  try{ localStorage.setItem("lgs_kutlama_"+curStudent,JSON.stringify(st)); }catch(e){}
+}
+function achievementsFor(r,d,sid,store){
+  var list=[];
+  var items=[{key:"total",sid:null,label:"📚 Günlük toplam"}];
+  var sj=SUBJ.find(function(s){return s.id===sid;});
+  if(sj) items.unshift({key:sid,sid:sid,label:sj.e+" "+sj.n});
+  items.forEach(function(it){
+    var rec=recordLevel(r,d,it.sid); if(!rec) return;
+    // Her gün ve öğe için her seviye (ay=1, yıl=2) yalnızca bir kez kutlanır; + düğmesine basarken tekrar tekrar çıkmaz
+    var k=d+"|"+it.key, was=store[k]||0, rank=rec.level==="year"?2:1;
+    if(rank<=was) return;
+    store[k]=rank;
+    list.push({label:it.label,level:rec.level,value:rec.value,prev:rec.prev});
+  });
+  return list;
+}
+function checkAchievements(d,sid){
+  if(!curStudent||READONLY||_teacherMode) return;
+  var store=celebratedStore();
+  var list=achievementsFor(recs,d,sid,store);
+  if(!list.length) return;
+  saveCelebrated(store);
+  showAchievement(list,d);
+}
+
+// ── Ses: dosya gerektirmeyen kısa bir fanfar (Web Audio). Açma/kapama cihazda hatırlanır ──
+function soundOn(){ try{ return localStorage.getItem("lgs_ses")!=="kapali"; }catch(e){ return true; } }
+function setSoundOn(on){ try{ localStorage.setItem("lgs_ses",on?"acik":"kapali"); }catch(e){} }
+var _audioCtx=null;
+function playAchieveSound(level){
+  if(!soundOn()) return;
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+    if(!_audioCtx) _audioCtx=new AC();
+    if(_audioCtx.state==="suspended") _audioCtx.resume();
+    var notes=level==="year"?[523.25,659.25,783.99,1046.5,1318.5]:[523.25,659.25,783.99];
+    var t0=_audioCtx.currentTime+0.02;
+    notes.forEach(function(f,i){
+      var o=_audioCtx.createOscillator(), g=_audioCtx.createGain(), st=t0+i*0.13;
+      o.type="triangle"; o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,st);
+      g.gain.exponentialRampToValueAtTime(0.25,st+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,st+(i===notes.length-1?0.7:0.22));
+      o.connect(g); g.connect(_audioCtx.destination);
+      o.start(st); o.stop(st+0.75);
+    });
+  }catch(e){}
+}
+
+// ── Popup ──
+var _achTimer=null;
+function closeAchievement(){
+  var el=document.getElementById("ach-pop"); if(el) el.parentNode.removeChild(el);
+  clearTimeout(_achTimer);
+}
+function toggleAchSound(btn){
+  var on=!soundOn(); setSoundOn(on); btn.textContent=on?"🔔 Ses açık":"🔕 Ses kapalı";
+  if(on) playAchieveSound("month");
+}
+function showAchievement(list,d){
+  closeAchievement();
+  var year=list.some(function(a){return a.level==="year";});
+  var head=year?"🏆 Yıllık rekor!":"🎉 Aylık rekor!";
+  var col=year?"#d97706":"#4F46E5";
+  if(!document.getElementById("ach-style")){
+    var st=document.createElement("style"); st.id="ach-style";
+    st.textContent="@keyframes achIn{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}"
+      +"@keyframes achPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}"
+      +"#ach-card{animation:achIn .25s ease-out}#ach-emoji{animation:achPulse 1s ease-in-out 2}"
+      +"@media (prefers-reduced-motion:reduce){#ach-card,#ach-emoji{animation:none}}";
+    document.head.appendChild(st);
+  }
+  var lines=list.map(function(a){
+    var tag=a.level==="year"?"bu yılın":"bu ayın";
+    return '<div style="padding:8px 10px;background:#f9fafb;border-radius:10px;margin-bottom:6px;text-align:left">'
+      +'<div style="font-size:13px;font-weight:900;color:#222">'+a.label+': '+a.value+' soru</div>'
+      +'<div style="font-size:11px;font-weight:700;color:#888">'+tag+' en yüksek günü (önceki: '+a.prev+')</div></div>';
+  }).join("");
+  var dateNote=d!==today()?'<div style="font-size:11px;color:#aaa;font-weight:700;margin-bottom:8px">'+fmtD(d)+' günü</div>':"";
+  var pop=document.createElement("div");
+  pop.id="ach-pop"; pop.setAttribute("role","dialog"); pop.setAttribute("aria-live","polite");
+  pop.style.cssText="position:fixed;inset:0;background:#0006;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px";
+  pop.innerHTML='<div id="ach-card" style="background:white;border-radius:24px;padding:26px 22px 18px;max-width:320px;width:100%;box-shadow:0 20px 60px #0004;text-align:center;border-top:6px solid '+col+'">'
+    +'<div id="ach-emoji" style="font-size:52px;line-height:1.1">'+(year?"🏆":"🎉")+'</div>'
+    +'<div style="font-size:19px;font-weight:900;color:'+col+';margin:6px 0 4px">'+head.replace(/^\S+\s/,"")+'</div>'
+    +'<div style="font-size:12px;color:#888;font-weight:700;margin-bottom:10px">Harika gidiyorsun, devam et!</div>'
+    +dateNote+lines
+    +'<div style="display:flex;gap:8px;margin-top:12px">'
+    +'<button onclick="toggleAchSound(this)" style="flex:1;padding:10px;border-radius:12px;border:2px solid #e5e7eb;background:white;font-size:12px;font-weight:800;color:#666;font-family:Nunito,sans-serif;cursor:pointer">'+(soundOn()?"🔔 Ses açık":"🔕 Ses kapalı")+'</button>'
+    +'<button onclick="closeAchievement()" style="flex:1;padding:10px;border-radius:12px;border:none;background:'+col+';color:white;font-size:13px;font-weight:900;font-family:Nunito,sans-serif;cursor:pointer">Tamam</button></div></div>';
+  pop.addEventListener("click",function(e){ if(e.target===pop) closeAchievement(); });
+  document.body.appendChild(pop);
+  playAchieveSound(year?"year":"month");
+  _achTimer=setTimeout(closeAchievement,6000);
 }
 
 function adj(sid,field,delta){
