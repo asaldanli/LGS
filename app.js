@@ -1134,33 +1134,35 @@ function statsSelLabel(){
   return sel.length?sel.map(smLabel).join(", "):"Tüm aylar";
 }
 // ═══════════════════════════════════════════════════════════════════
-//  GENEL DENEME: ders bazlı doğru/yanlış, ders netleri, ağırlıklı net ve tahmini LGS puanı
-//  Katsayılar ve soru sayıları (üçüncü taraf LGS kaynakları, MEB rehberleriyle uyumlu): Türkçe, Matematik, Fen
-//  Bilimleri 4 katsayı (20 soru); T.C. İnkılap Tarihi, Din Kültürü, Yabancı Dil 1 katsayı (10 soru). Toplam 90 soru.
-//  Resmi LGS puanı her yıl tüm adayların ortalama ve standart sapmasına göre standart puan olarak hesaplanır.
-//  Burada gösterilen puan, ağırlıklı netin 100-500 aralığına doğrusal ölçeklenmesidir (yaklaşık, ilerlemeyi izlemek için).
+//  GENEL DENEME: ders bazlı doğru/yanlış, ders netleri ve tahmini LGS puanı
+//  Her dersin 1 netinin 2026 LGS'de kaç puan getirdiği (kullanıcının paylaştığı 2026 LGS görseli):
+//  Türkçe 4,18; Matematik 4,98; Fen Bilimleri 3,83; İnkılap Tarihi 1,68; Din Kültürü 1,93; İngilizce 1,62.
+//  Soru sayıları: Türkçe, Matematik, Fen 20; İnkılap, Din, İngilizce 10 (toplam 90).
+//  Tahmini puan = taban + toplam(ders neti x ders net puanı). Taban, 90 net = 500 puan olacak şekilde
+//  hesaplanır (500 - toplam(soru sayısı x net puanı) = 187,9).
+//  Bu değerler sınav yılına göre değişir; resmi puan her yıl standart puan yöntemiyle belirlenir. Ekranda "yaklaşık" yazar.
+//  Yeni yılın değerleri için yalnızca p alanları ve LGS_PUAN_YILI güncellenir.
 // ═══════════════════════════════════════════════════════════════════
+var LGS_PUAN_YILI=2026;
 var LGS_DERSLER=[
-  {id:"turkce",n:"Türkçe",s:"Tür",k:4,q:20},
-  {id:"matematik",n:"Matematik",s:"Mat",k:4,q:20},
-  {id:"fen",n:"Fen Bilimleri",s:"Fen",k:4,q:20},
-  {id:"sosyal",n:"İnkılap Tarihi",s:"İnk",k:1,q:10},
-  {id:"din",n:"Din Kültürü",s:"Din",k:1,q:10},
-  {id:"ingilizce",n:"İngilizce",s:"İng",k:1,q:10}
+  {id:"turkce",n:"Türkçe",s:"Tür",p:4.18,q:20},
+  {id:"matematik",n:"Matematik",s:"Mat",p:4.98,q:20},
+  {id:"fen",n:"Fen Bilimleri",s:"Fen",p:3.83,q:20},
+  {id:"sosyal",n:"İnkılap Tarihi",s:"İnk",p:1.68,q:10},
+  {id:"din",n:"Din Kültürü",s:"Din",p:1.93,q:10},
+  {id:"ingilizce",n:"İngilizce",s:"İng",p:1.62,q:10}
 ];
+var LGS_TABAN=Math.round((500-LGS_DERSLER.reduce(function(a,s){ return a+s.q*s.p; },0))*100)/100;
 var denemeler={}, denemeRef=null, denemeListener=null, denemeErr=false;
 
-function estimateLgsPuan(weighted,maxWeighted){
-  return Math.round(Math.max(100,Math.min(500,100+400*weighted/maxWeighted)));
-}
 // d: {turkce:{c:doğru,w:yanlış},...}. Boş soru ayrıca tutulmaz (net hesabını etkilemez)
 function denemeSonuc(d){
-  var nets={}, total=0, weighted=0, maxW=0;
+  var nets={}, total=0, puan=LGS_TABAN;
   LGS_DERSLER.forEach(function(s){
     var x=(d&&d[s.id])||{}, net=calcNet(x.c||0,x.w||0);
-    nets[s.id]=net; total+=net; weighted+=net*s.k; maxW+=s.q*s.k;
+    nets[s.id]=net; total+=net; puan+=net*s.p;
   });
-  return {nets:nets,total:total,weighted:weighted,maxWeighted:maxW,puan:estimateLgsPuan(weighted,maxW)};
+  return {nets:nets,total:total,puan:Math.round(Math.max(100,Math.min(500,puan)))};
 }
 function escHtml(x){
   return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -1197,7 +1199,7 @@ function updateDenemePreview(){
   var v=dnInputVals(), r=denemeSonuc(v.d);
   var el=document.getElementById("dn-preview"), er=document.getElementById("dn-err");
   if(er) er.textContent=v.err;
-  if(el) el.innerHTML='<b>Toplam net: '+fnet(r.total)+'</b> · Ağırlıklı net: '+fnet(r.weighted)+' / '+r.maxWeighted
+  if(el) el.innerHTML='<b>Toplam net: '+fnet(r.total)+' / 90</b>'
     +'<br><span style="color:var(--p);font-weight:900">≈ '+r.puan+' puan</span> <span style="color:#666">(yaklaşık)</span>';
 }
 function openDenemeForm(id){
@@ -1228,7 +1230,7 @@ function openDenemeForm(id){
     +rows
     +'<div id="dn-preview" style="background:#EEF2FF;border-radius:12px;padding:10px;font-size:13px;font-weight:700;color:#333;margin-top:8px;text-align:center"></div>'
     +'<div id="dn-err" role="alert" style="font-size:12px;font-weight:800;color:#dc2626;min-height:16px;margin-top:6px;text-align:center"></div>'
-    +'<div style="font-size:11px;color:#666;font-weight:700;margin:4px 0 10px">Boş sorular yazılmaz, net hesabını etkilemez. Kaydedince o günün "Genel Deneme" toplamı otomatik güncellenir. Puan, ağırlıklı netten yapılan yaklaşık bir tahmindir.</div>'
+    +'<div style="font-size:11px;color:#666;font-weight:700;margin:4px 0 10px">Boş sorular yazılmaz, net hesabını etkilemez. Kaydedince o günün "Genel Deneme" toplamı otomatik güncellenir. Puan, '+LGS_PUAN_YILI+' LGS net puanlarıyla yapılan yaklaşık bir tahmindir.</div>'
     +'<div style="display:flex;gap:8px"><button onclick="closeDenemeForm()" style="flex:1;padding:12px;border-radius:12px;border:2px solid #e5e7eb;background:white;font-size:13px;font-weight:800;color:#666;font-family:Nunito,sans-serif;cursor:pointer">İptal</button>'
     +'<button id="dn-save" onclick="saveDeneme()" style="flex:2;padding:12px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--p),var(--v));color:white;font-size:14px;font-weight:900;font-family:Nunito,sans-serif;cursor:pointer">💾 Kaydet</button></div></div>';
   document.body.appendChild(pop);
@@ -1286,7 +1288,7 @@ function statsDenemeCard(){
     return '<div style="padding:10px 0;border-bottom:1px solid #f3f4f6">'
       +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div style="flex:1;font-size:13px;font-weight:900;color:#333">'+fmtD(r.date)+(r.name?' <span style="color:#666;font-weight:700">· '+escHtml(r.name)+'</span>':'')+'</div>'
       +'<div style="font-size:14px;font-weight:900;color:var(--p)">≈ '+s.puan+'</div></div>'
-      +'<div style="font-size:12px;font-weight:700;color:#666;margin-bottom:4px">Toplam net <b style="color:#333">'+fnet(s.total)+'</b> / 90 · Ağırlıklı '+fnet(s.weighted)+' / '+s.maxWeighted+'</div>'
+      +'<div style="font-size:12px;font-weight:700;color:#666;margin-bottom:4px">Toplam net <b style="color:#333">'+fnet(s.total)+'</b> / 90</div>'
       +'<div>'+chips+'</div>'
       +(edit?'<div style="display:flex;gap:6px;margin-top:2px"><button onclick="openDenemeForm(\''+x.id+'\')" style="padding:5px 10px;border-radius:8px;border:2px solid #e5e7eb;background:white;font-size:11px;font-weight:800;color:#555;cursor:pointer;font-family:Nunito,sans-serif">Düzenle</button>'
         +'<button onclick="deleteDeneme(\''+x.id+'\')" style="padding:5px 10px;border-radius:8px;border:2px solid #fecaca;background:white;font-size:11px;font-weight:800;color:#dc2626;cursor:pointer;font-family:Nunito,sans-serif">Sil</button></div>':'')
@@ -1294,7 +1296,7 @@ function statsDenemeCard(){
   }).join("");
   var chart=list.length>1?'<div style="font-size:12px;font-weight:800;color:#666;margin:12px 0 6px">Gelişim: toplam net ve tahmini puan</div><div style="position:relative;height:220px"><canvas id="dn-trend" role="img" aria-label="Deneme toplam net ve tahmini puan grafiği"></canvas></div>':"";
   return head+rows+chart
-    +'<div style="font-size:11px;color:#666;font-weight:700;margin-top:8px">Net = Doğru − Yanlış ÷ 3. Ağırlıklı net: Türkçe, Matematik, Fen ×4, diğerleri ×1 (en fazla 270). ≈ puan, ağırlıklı netin 100-500 aralığına doğrusal ölçeklenmesidir; resmi LGS puanı her yıl tüm adayların ortalama ve standart sapmasına göre hesaplanır.</div></div>';
+    +'<div style="font-size:11px;color:#666;font-weight:700;margin-top:8px">Net = Doğru − Yanlış ÷ 3. ≈ puan, '+LGS_PUAN_YILI+' LGS\'de 1 netin ders başına puan getirisiyle hesaplanır: '+LGS_DERSLER.map(function(d){ return d.n+' '+String(d.p).replace(".",","); }).join(", ")+' (90 net = 500 puan olacak şekilde). Resmi puan her yıl sınavın dağılımına göre değişir, bu yalnızca bir tahmindir.</div></div>';
 }
 function drawDenemeChart(){
   destroyChart("dn");
