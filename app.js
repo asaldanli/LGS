@@ -715,6 +715,7 @@ function renderDaily(){
   document.getElementById("vw").innerHTML=
     (curStudent==="omer"?lgsWidget():"")
     +streakWidget()
+    +goalRemainingCard()
     +'<div class="period-nav">'
     +'<button onclick="calPrev()">‹</button>'
     +'<span>'+MONTHS[p.m]+' '+p.y+'</span>'
@@ -822,6 +823,7 @@ function renderWeekly(){
     +sb("✓"+ws.correct,"Doğru","#f0fdf4","#22c55e")
     +sb(fnet(ws.net),"Net","#F0FDF4","#16a34a")
     +'</div>'
+    +weekGoalCard(ws.total)
     +dayCards+table+dayDetail
     +'<div class="card" style="margin-top:4px">'
     +'<div class="card-ttl">📊 Son 12 Hafta — Toplam Soru</div>'
@@ -2136,11 +2138,82 @@ function getWeeklyGoal(){
 }
 
 function saveWeeklyGoal(val){
+  if(!curStudent||READONLY||_teacherMode) return;
   val = Math.max(0, parseInt(val)||0);
   if(!goals["__weeklyGoal"] || goals["__weeklyGoal"]!==val){
     goals["__weeklyGoal"] = val;
     db.ref("goals/"+curStudent+"/__weeklyGoal").set(val);
   }
+}
+
+// Bir ayın geçerli hedefleri: o ay için kayıtlıysa onlar, değilse önceki aylardan en yakın kayıtlı olan
+// (Hedefler ekranındaki "bir önceki aydan aktar" ile aynı mantık, hedefleri değiştirmez)
+function effectiveGoals(ymStr){
+  if(goals[ymStr]&&Object.keys(goals[ymStr]).length) return goals[ymStr];
+  var ms=goalMonths(), i=ms.indexOf(ymStr);
+  for(var k=i-1;k>=0;k--){
+    if(goals[ms[k]]&&Object.keys(goals[ms[k]]).length) return goals[ms[k]];
+  }
+  return null;
+}
+
+// Günlük ekran: seçili günün ayındaki aylık hedeflere göre kalan soru sayısı
+// Örnek: matematik hedefi 500, ayın ilk günü 50 çözüldüyse kalan 450
+function goalRemainingCard(){
+  var m=selDate.slice(0,7), td=today(), curM=td.slice(0,7);
+  if(m>curM) return "";
+  var g=effectiveGoals(m); if(!g) return "";
+  var p=parseYM(m), daysLeft=(m===curM)?(dim(p.y,p.m)-parseInt(td.slice(8))+1):0;
+  var rows="", any=false;
+  SUBJ.forEach(function(s){
+    var target=(g[s.id]&&g[s.id].targetTotal)||0; if(target<=0) return;
+    any=true;
+    var solved=mstats(m,s.id).total, left=Math.max(0,target-solved);
+    var pct=Math.min(100,Math.round(solved/target*100));
+    var note=left===0?'<span style="color:#16a34a;font-weight:900">✓ Tamamlandı</span>'
+      :'<span style="font-weight:900;color:'+s.c+'">Kalan '+left+'</span>'
+        +(daysLeft>0?'<span style="color:#666"> · günde ~'+Math.ceil(left/daysLeft)+'</span>':'');
+    rows+='<div style="padding:7px 0;border-bottom:1px solid #f3f4f6">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:16px">'+s.e+'</span>'
+      +'<span style="flex:1;font-size:12px;font-weight:800;color:#333">'+s.n+'</span>'
+      +'<span style="font-size:11px;font-weight:700">'+note+'</span></div>'
+      +'<div class="pbr"><div class="pfill" style="width:'+pct+'%;background:'+(left===0?"#22c55e":s.c)+'"></div></div>'
+      +'<div style="font-size:11px;color:#666;font-weight:700;margin-top:2px">'+solved+' / '+target+' soru</div></div>';
+  });
+  if(!any) return "";
+  return '<div class="card" style="padding:12px 14px"><div style="font-size:13px;font-weight:900;color:#333;margin-bottom:2px">🎯 Aylık hedef durumu <span style="font-size:11px;color:#666;font-weight:700">· '+MONTHS[p.m]+' '+p.y+'</span></div>'
+    +(daysLeft>0?'<div style="font-size:11px;color:#666;font-weight:700;margin-bottom:4px">Bugün dahil '+daysLeft+' gün kaldı</div>':'')
+    +rows+'</div>';
+}
+
+// Aylık hedeflerden önerilen haftalık hedef: toplam aylık hedef / ayın gün sayısı x 7
+function suggestedWeeklyGoal(){
+  var m=ymNow(), g=effectiveGoals(m); if(!g) return 0;
+  var sum=0; SUBJ.forEach(function(s){ sum+=(g[s.id]&&g[s.id].targetTotal)||0; });
+  var p=parseYM(m);
+  return Math.round(sum/dim(p.y,p.m)*7);
+}
+function setWeekGoalValue(v){ saveWeeklyGoal(v); renderWeekly(); }
+function applySuggestedWeekGoal(){ saveWeeklyGoal(suggestedWeeklyGoal()); renderWeekly(); }
+
+// Haftalık ekran: haftalık hedef ve seçili haftanın ilerlemesi
+function weekGoalCard(weekTotal){
+  var g=getWeeklyGoal(), edit=!READONLY&&!_teacherMode, sug=suggestedWeeklyGoal();
+  var left=Math.max(0,g-weekTotal), pct=g>0?Math.min(100,Math.round(weekTotal/g*100)):0;
+  var btn='width:30px;height:30px;border-radius:9px;border:none;font-size:16px;font-weight:900;cursor:pointer';
+  return '<div class="card" style="padding:12px 14px"><div style="font-size:13px;font-weight:900;color:#333;margin-bottom:8px">🎯 Haftalık hedef</div>'
+    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+    +(edit?'<button aria-label="Haftalık hedefi azalt" style="'+btn+';background:#e5e7eb;color:#555" onclick="adjWeekGoal(-10)">−</button>':'')
+    +(edit?'<input type="number" min="0" aria-label="Haftalık hedef soru sayısı" value="'+g+'" style="width:70px;text-align:center;border-radius:10px;border:2px solid var(--p);font-size:16px;font-weight:900;color:var(--p);padding:5px 0;font-family:Nunito,sans-serif" onchange="setWeekGoalValue(this.value)">'
+      :'<span style="font-size:18px;font-weight:900;color:var(--p)">'+g+'</span>')
+    +(edit?'<button aria-label="Haftalık hedefi artır" style="'+btn+';background:var(--p);color:white" onclick="adjWeekGoal(10)">+</button>':'')
+    +'<span style="font-size:12px;font-weight:700;color:#666">soru / hafta</span></div>'
+    +(g>0?'<div class="pbr" style="margin-top:8px"><div class="pfill" style="width:'+pct+'%;background:'+(left===0?"#22c55e":"var(--p)")+'"></div></div>'
+      +'<div style="font-size:12px;font-weight:800;margin-top:4px;color:'+(left===0?"#16a34a":"#333")+'">'+(left===0?'✓ Haftalık hedef tamamlandı':'Bu hafta '+weekTotal+' / '+g+' soru · kalan '+left)+'</div>'
+      :'<div style="font-size:12px;color:#666;font-weight:700;margin-top:8px">Henüz haftalık hedef belirlenmedi.</div>')
+    +(edit&&sug>0&&sug!==g?'<div style="margin-top:8px;font-size:11px;font-weight:700;color:#666">Aylık hedeflerden önerilen: <b>'+sug+'</b> soru/hafta '
+      +'<button style="margin-left:6px;padding:4px 10px;border-radius:8px;border:2px solid var(--p);background:white;color:var(--p);font-size:11px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif" onclick="applySuggestedWeekGoal()">Uygula</button></div>':'')
+    +'</div>';
 }
 
 // Render LGS countdown widget
