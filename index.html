@@ -10,10 +10,10 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" onerror="fbLoadErr()"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onerror="fbLoadErr()"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" onerror="fbLoadErr()"></script>
-<script>function fbLoadErr(){document.body.innerHTML='<div style="font-family:sans-serif;text-align:center;padding:60px 20px"><div style="font-size:48px;margin-bottom:16px">⚠️</div><h2 style="color:#ef4444;margin-bottom:12px">Firebase yüklenemedi</h2><p style="color:#666;max-width:360px;margin:0 auto 20px">İnternet bağlantınızı kontrol edin ve sayfayı yenileyin.</p><button onclick="location.reload()" style="padding:12px 28px;background:#4F46E5;color:white;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer">🔄 Yenile</button></div>';}</script>
+<script>function fbLoadErr(){document.body.innerHTML='<div style="font-family:sans-serif;text-align:center;padding:60px 20px"><div style="font-size:48px;margin-bottom:16px">⚠️</div><h2 style="color:#dc2626;margin-bottom:12px">Firebase yüklenemedi</h2><p style="color:#666;max-width:360px;margin:0 auto 20px">İnternet bağlantınızı kontrol edin ve sayfayı yenileyin.</p><button onclick="location.reload()" style="padding:12px 28px;background:#4F46E5;color:white;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer">🔄 Yenile</button></div>';}</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<link rel="stylesheet" href="style.css?v=20261018-1"/>
+<link rel="stylesheet" href="style.css?v=20261018-3"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -24,7 +24,7 @@
     <div style="font-size:48px;margin-bottom:16px">📚</div>
     <h1>LGS Hazırlık Soru Takip</h1>
     <p id="pick-sub">Hangi öğrencinin takibini yapıyorsunuz?</p>
-    <div id="readonly-badge" style="display:none;background:#FEF3C7;border:2px solid #F59E0B;border-radius:12px;padding:8px 14px;margin-bottom:14px;font-size:12px;font-weight:800;color:#92400E">👁️ Görüntüleme Modu — Veri girişi kapalı</div>
+    <div id="readonly-badge" style="display:none;background:#FEF3C7;border:2px solid #F59E0B;border-radius:12px;padding:8px 14px;margin-bottom:14px;font-size:13px;font-weight:800;color:#92400E">👁️ Görüntüleme Modu — Veri girişi kapalı</div>
     <button class="student-btn" onclick="askPassword('omer')">
       <div class="student-avatar" id="pick-avatar-omer" style="background:#EEF2FF;overflow:hidden">👦</div>
       <div class="student-info"><b>Ömer Doruk Saldanlı</b><span>Öğrenci</span></div>
@@ -42,19 +42,19 @@
       <div class="student-info"><b>Arif Saldanlı</b><span>Yönetici</span></div>
     </button>
       <div id="upload-section" style="margin-top:8px;border-top:1px solid #f3f4f6;padding-top:16px">
-      <div style="font-size:12px;color:#aaa;font-weight:700;margin-bottom:10px;text-align:center">Geçmiş verileri yükle</div>
+      <div style="font-size:13px;color:#767676;font-weight:700;margin-bottom:10px;text-align:center">Geçmiş verileri yükle</div>
       <div style="display:flex;gap:8px">
-        <button onclick="dlTemplate()" style="flex:1;padding:11px;border-radius:14px;border:2px solid #22c55e;background:white;color:#16a34a;font-size:12px;font-weight:800;font-family:Nunito,sans-serif">
+        <button onclick="dlTemplate()" style="flex:1;padding:11px;border-radius:14px;border:2px solid #22c55e;background:white;color:#15803d;font-size:13px;font-weight:800;font-family:Nunito,sans-serif">
           📥 Şablon İndir
         </button>
-        <label style="flex:1;padding:11px;border-radius:14px;border:2px solid #4F46E5;background:white;color:#4F46E5;font-size:12px;font-weight:800;cursor:pointer;text-align:center;display:flex;align-items:center;justify-content:center;gap:6px">
+        <label style="flex:1;padding:11px;border-radius:14px;border:2px solid #4F46E5;background:white;color:#4F46E5;font-size:13px;font-weight:800;cursor:pointer;text-align:center;display:flex;align-items:center;justify-content:center;gap:6px">
           📤 Excel Yükle
           <input type="file" accept=".xlsx,.xls" style="display:none" onchange="uploadExcel(this)"/>
         </label>
       </div>
-      <div id="upload-msg" style="font-size:12px;font-weight:700;text-align:center;margin-top:8px;min-height:18px"></div>
-      <button onclick="backupAndSend()" style="width:100%;padding:11px;border-radius:14px;border:2px solid #ef4444;background:white;color:#dc2626;font-size:12px;font-weight:800;font-family:Nunito,sans-serif;margin-top:8px;cursor:pointer">💾 Tüm Verileri Yedekle</button>
-      <div id="backup-msg" style="font-size:11px;font-weight:700;text-align:center;margin-top:6px;min-height:16px"></div>
+      <div id="upload-msg" style="font-size:13px;font-weight:700;text-align:center;margin-top:8px;min-height:18px"></div>
+      <button onclick="backupAndSend()" style="width:100%;padding:11px;border-radius:14px;border:2px solid #ef4444;background:white;color:#dc2626;font-size:13px;font-weight:800;font-family:Nunito,sans-serif;margin-top:8px;cursor:pointer">💾 Tüm Verileri Yedekle</button>
+      <div id="backup-msg" style="font-size:12px;font-weight:700;text-align:center;margin-top:6px;min-height:16px"></div>
     </div>
   </div>
 </div>
@@ -66,13 +66,13 @@
       <div style="display:flex;align-items:center;gap:12px">
         <div id="hdr-avatar" style="width:46px;height:46px;border-radius:14px;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;overflow:hidden;cursor:pointer" onclick="openAvatarModal()" title="Profil resmini değiştir"></div>
         <div>
-          <div style="font-size:11px;opacity:.7;font-weight:700;letter-spacing:1.5px;margin-bottom:2px" id="hdr-sub">—</div>
+          <div style="font-size:12px;opacity:.7;font-weight:700;letter-spacing:1.5px;margin-bottom:2px" id="hdr-sub">—</div>
           <div style="font-size:20px;font-weight:900" id="hdr-name">—</div>
         </div>
       </div>
       <div style="text-align:right">
         <div style="display:flex;gap:6px;justify-content:flex-end;margin-bottom:4px">
-          <div id="ro-pill" style="display:none;background:rgba(245,158,11,0.25);border-radius:20px;padding:4px 10px;font-size:10px;font-weight:800;color:#FDE68A">👁️ Salt Okunur</div>
+          <div id="ro-pill" style="display:none;background:rgba(245,158,11,0.25);border-radius:20px;padding:4px 10px;font-size:12px;font-weight:800;color:#FDE68A">👁️ Salt Okunur</div>
           <div class="sync-pill" id="sync-pill">
             <div class="sync-dot" id="sync-dot" style="background:#86EFAC"></div>
             <span id="sync-txt">Bağlanıyor...</span>
@@ -81,8 +81,8 @@
         </div>
         <div>
           <span style="font-size:24px;font-weight:900" id="hdr-total">0</span>
-          <span style="font-size:11px;opacity:.7;margin-left:2px">soru</span>
-          <span style="font-size:12px;opacity:.85;margin-left:8px">
+          <span style="font-size:12px;opacity:.7;margin-left:2px">soru</span>
+          <span style="font-size:13px;opacity:.85;margin-left:8px">
             <span style="color:#86EFAC">✓<span id="hdr-c">0</span></span>
             · <span style="color:#FCA5A5">✗<span id="hdr-w">0</span></span>
             · <span style="color:#FDE68A">Net:<span id="hdr-n">0</span></span>
@@ -111,63 +111,63 @@
   </div>
 </div>
 
-<script src="app.js?v=20261018-1"></script>
+<script src="app.js?v=20261018-3"></script>
 
 <!-- ── ŞİFRE MODAL ── -->
-<div id="pw-modal" style="display:none;position:fixed;inset:0;background:#0007;z-index:999;align-items:center;justify-content:center;padding:20px">
+<div id="pw-modal" role="dialog" aria-modal="true" aria-label="Giriş" style="display:none;position:fixed;inset:0;background:#0007;z-index:999;align-items:center;justify-content:center;padding:20px">
   <div style="background:white;border-radius:24px;padding:32px 28px;max-width:340px;width:100%;box-shadow:0 20px 60px #0004;text-align:center">
     <div id="pw-avatar" style="font-size:40px;margin-bottom:12px">👤</div>
     <div id="pw-name" style="font-size:17px;font-weight:900;color:#222;margin-bottom:4px"></div>
-    <div style="font-size:12px;color:#aaa;font-weight:600;margin-bottom:22px">Şifrenizi girin</div>
+    <div style="font-size:13px;color:#767676;font-weight:600;margin-bottom:22px">Şifrenizi girin</div>
     <div style="position:relative;margin-bottom:10px">
       <input id="pw-input" type="password" placeholder="••••••"
         style="width:100%;padding:14px 46px 14px 16px;border-radius:14px;border:2px solid #e5e7eb;font-size:18px;font-weight:900;letter-spacing:4px;text-align:center;outline:none;font-family:Nunito,sans-serif;transition:border .2s"
         oninput="pwErr(false)" onkeydown="if(event.key==='Enter')pwSubmit()"/>
-      <button onclick="togglePwVis()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;cursor:pointer;color:#aaa" id="pw-eye">👁</button>
+      <button onclick="togglePwVis()" aria-label="Şifreyi göster veya gizle" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;cursor:pointer;color:#767676" id="pw-eye">👁</button>
     </div>
-    <label id="pw-remember-row" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;font-size:12px;font-weight:700;color:#666;cursor:pointer">
+    <label id="pw-remember-row" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;font-size:13px;font-weight:700;color:#666;cursor:pointer">
       <input id="pw-remember" type="checkbox" style="width:16px;height:16px"> Bu cihazda beni hatırla
     </label>
-    <div id="pw-err" style="font-size:12px;font-weight:800;color:#ef4444;margin-bottom:12px;min-height:18px"></div>
+    <div id="pw-err" style="font-size:13px;font-weight:800;color:#dc2626;margin-bottom:12px;min-height:18px"></div>
     <div style="display:flex;gap:10px">
-      <button onclick="closePwModal()" style="flex:1;padding:12px;border-radius:12px;border:2px solid #e5e7eb;background:white;font-size:13px;font-weight:800;color:#888;font-family:Nunito,sans-serif;cursor:pointer">İptal</button>
+      <button onclick="closePwModal()" style="flex:1;padding:12px;border-radius:12px;border:2px solid #e5e7eb;background:white;font-size:14px;font-weight:800;color:#666;font-family:Nunito,sans-serif;cursor:pointer">İptal</button>
       <button onclick="pwSubmit()" id="pw-btn" style="flex:2;padding:12px;border-radius:12px;border:none;background:linear-gradient(135deg,#4F46E5,#7C3AED);color:white;font-size:14px;font-weight:900;font-family:Nunito,sans-serif;cursor:pointer">Giriş Yap →</button>
     </div>
   </div>
 </div>
 
 <!-- ── ÖĞRETMEN ÖĞRENCİ SEÇİCİ ── -->
-<div id="teacher-modal" style="display:none;position:fixed;inset:0;background:#0007;z-index:998;align-items:center;justify-content:center;padding:20px">
+<div id="teacher-modal" role="dialog" aria-modal="true" aria-label="Öğrenci seçimi" style="display:none;position:fixed;inset:0;background:#0007;z-index:998;align-items:center;justify-content:center;padding:20px">
   <div style="background:white;border-radius:24px;padding:28px;max-width:340px;width:100%;box-shadow:0 20px 60px #0004;text-align:center">
     <div style="font-size:36px;margin-bottom:10px">👩‍🏫</div>
     <div style="font-size:16px;font-weight:900;color:#222;margin-bottom:4px">Öğretmen Girişi</div>
-    <div style="font-size:12px;color:#aaa;font-weight:600;margin-bottom:22px">Hangi öğrenciyi görüntülemek istiyorsunuz?</div>
+    <div style="font-size:13px;color:#767676;font-weight:600;margin-bottom:22px">Hangi öğrenciyi görüntülemek istiyorsunuz?</div>
     <button onclick="teacherPick('omer')" style="width:100%;padding:14px 16px;border-radius:14px;border:2px solid #e5e7eb;background:white;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer;font-family:Nunito,sans-serif;transition:all .2s" onmouseover="this.style.borderColor='#4F46E5'" onmouseout="this.style.borderColor='#e5e7eb'">
       <div id="tm-avatar-omer" style="width:44px;height:44px;border-radius:12px;background:#EEF2FF;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;overflow:hidden">👦</div>
-      <div style="text-align:left"><b style="display:block;font-size:14px;font-weight:900;color:#222">Ömer Doruk Saldanlı</b><span style="font-size:11px;color:#aaa;font-weight:600">Öğrenci</span></div>
+      <div style="text-align:left"><b style="display:block;font-size:14px;font-weight:900;color:#222">Ömer Doruk Saldanlı</b><span style="font-size:12px;color:#767676;font-weight:600">Öğrenci</span></div>
     </button>
     <button onclick="teacherPick('zeynep')" style="width:100%;padding:14px 16px;border-radius:14px;border:2px solid #e5e7eb;background:white;margin-bottom:18px;display:flex;align-items:center;gap:12px;cursor:pointer;font-family:Nunito,sans-serif;transition:all .2s" onmouseover="this.style.borderColor='#DB2777'" onmouseout="this.style.borderColor='#e5e7eb'">
       <div id="tm-avatar-zeynep" style="width:44px;height:44px;border-radius:12px;background:#FDF2F8;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;overflow:hidden">👧</div>
-      <div style="text-align:left"><b style="display:block;font-size:14px;font-weight:900;color:#222">Zeynep Alya Saldanlı</b><span style="font-size:11px;color:#aaa;font-weight:600">Öğrenci</span></div>
+      <div style="text-align:left"><b style="display:block;font-size:14px;font-weight:900;color:#222">Zeynep Alya Saldanlı</b><span style="font-size:12px;color:#767676;font-weight:600">Öğrenci</span></div>
     </button>
-    <button onclick="closeTeacherModal()" style="width:100%;padding:10px;border-radius:12px;border:2px solid #e5e7eb;background:white;font-size:13px;font-weight:800;color:#888;cursor:pointer;font-family:Nunito,sans-serif">İptal</button>
+    <button onclick="closeTeacherModal()" style="width:100%;padding:10px;border-radius:12px;border:2px solid #e5e7eb;background:white;font-size:14px;font-weight:800;color:#666;cursor:pointer;font-family:Nunito,sans-serif">İptal</button>
   </div>
 </div>
 
 <!-- ── PROFİL RESMİ YÜKLEME MODAL ── -->
-<div id="avatar-modal" style="display:none;position:fixed;inset:0;background:#0007;z-index:997;align-items:center;justify-content:center;padding:20px">
+<div id="avatar-modal" role="dialog" aria-modal="true" aria-label="Profil resmi" style="display:none;position:fixed;inset:0;background:#0007;z-index:997;align-items:center;justify-content:center;padding:20px">
   <div style="background:white;border-radius:24px;padding:28px;max-width:320px;width:100%;box-shadow:0 20px 60px #0004;text-align:center">
     <div style="font-size:14px;font-weight:900;color:#222;margin-bottom:16px">📸 Profil Resmi Değiştir</div>
     <div id="avatar-preview" style="width:90px;height:90px;border-radius:22px;background:#f3f4f6;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:44px;overflow:hidden"></div>
-    <label style="display:block;width:100%;padding:12px;border-radius:12px;border:2px dashed #4F46E5;background:#EEF2FF;color:#4F46E5;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px;font-family:Nunito,sans-serif">
+    <label style="display:block;width:100%;padding:12px;border-radius:12px;border:2px dashed #4F46E5;background:#EEF2FF;color:#4F46E5;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:10px;font-family:Nunito,sans-serif">
       📁 Fotoğraf Seç
       <input type="file" accept="image/*" style="display:none" onchange="previewAvatar(this)"/>
     </label>
     <div style="display:flex;gap:8px">
-      <button onclick="closeAvatarModal()" style="flex:1;padding:10px;border-radius:10px;border:2px solid #e5e7eb;background:white;font-size:12px;font-weight:800;color:#888;cursor:pointer;font-family:Nunito,sans-serif">İptal</button>
-      <button onclick="saveAvatar()" id="avatar-save-btn" style="flex:2;padding:10px;border-radius:10px;border:none;background:linear-gradient(135deg,#4F46E5,#7C3AED);color:white;font-size:13px;font-weight:900;cursor:pointer;font-family:Nunito,sans-serif">💾 Kaydet</button>
+      <button onclick="closeAvatarModal()" style="flex:1;padding:10px;border-radius:10px;border:2px solid #e5e7eb;background:white;font-size:13px;font-weight:800;color:#666;cursor:pointer;font-family:Nunito,sans-serif">İptal</button>
+      <button onclick="saveAvatar()" id="avatar-save-btn" style="flex:2;padding:10px;border-radius:10px;border:none;background:linear-gradient(135deg,#4F46E5,#7C3AED);color:white;font-size:14px;font-weight:900;cursor:pointer;font-family:Nunito,sans-serif">💾 Kaydet</button>
     </div>
-    <button onclick="removeAvatar()" style="width:100%;padding:8px;border-radius:10px;border:2px solid #fee2e2;background:white;color:#ef4444;font-size:11px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif;margin-top:8px">🗑️ Resmi Kaldır</button>
+    <button onclick="removeAvatar()" style="width:100%;padding:8px;border-radius:10px;border:2px solid #fee2e2;background:white;color:#dc2626;font-size:12px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif;margin-top:8px">🗑️ Resmi Kaldır</button>
   </div>
 </div>
 
