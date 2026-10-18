@@ -1,0 +1,8 @@
+PDF çıktılarında kullanılan yazı tipi dosyaları
+
+NotoSans-Regular-tr.ttf ve NotoSans-Bold-tr.ttf
+Noto Sans yazı tipinin, Latin ve Türkçe harfleri (ş, ğ, ı, İ, ö, ü, ç ve diğerleri) içeren küçük bir alt kümesidir.
+Telif hakkı: The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
+Lisans: SIL Open Font License, Version 1.1 (https://openfontlicense.org)
+
+Bu dosyalar özgün yazı tipinin değiştirilmiş (alt küme) sürümleridir ve aynı lisansla dağıtılır.

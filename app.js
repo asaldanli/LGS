@@ -1477,7 +1477,8 @@ function drawSubjectLineChart(activeMonths){
 // ═══════════════════════════════════════════════════════════════════
 // ── PDF UTILITIES ─────────────────────────────────────────────────
 // Turkish character fix for jsPDF (helvetica doesn't support ş,ğ,ü,ö,ç,ı)
-function tr(s){
+// Türkçe karakterleri ASCII karşılıklarına çevirir (dosya adları ve yazı tipi yüklenemezse PDF metni için)
+function trAscii(s){
   return String(s||"")
     .replace(/ş/g,"s").replace(/Ş/g,"S")
     .replace(/ğ/g,"g").replace(/Ğ/g,"G")
@@ -1487,11 +1488,50 @@ function tr(s){
     .replace(/ı/g,"i").replace(/İ/g,"I")
     .replace(/â/g,"a").replace(/î/g,"i").replace(/û/g,"u");
 }
-// Emoji → short text label
-var SUBJ_LABELS = {
-  matematik:"[Mat]", turkce:"[Tur]", fen:"[Fen]",
-  sosyal:"[Sos]", ingilizce:"[Ing]", din:"[Din]", deneme:"[Den]"
-};
+// PDF metni: Türkçe yazı tipi yüklüyse olduğu gibi, değilse ASCII'ye çevrilmiş
+function tr(s){ return PDF_FONT==="NotoSans" ? String(s||"") : trAscii(s); }
+
+// ── PDF yazı tipi: Türkçe karakterler için Noto Sans (yalnızca gerekli harfler, ~16 KB; SIL OFL, fonts/LISANS.txt) ──
+var PDF_FONT="helvetica";
+var APP_VERSION=(function(){ try{ var el=document.querySelector('script[src*="app.js"]'); return (el&&el.src.split("?v=")[1])||"0"; }catch(e){ return "0"; } })();
+var _pdfFonts=null, _pdfFontsState="idle", _pdfWaiters=[];   // idle | loading | ready | failed
+function bufToB64(buf){
+  var b=new Uint8Array(buf), s="", i, CH=0x8000;
+  for(i=0;i<b.length;i+=CH) s+=String.fromCharCode.apply(null,b.subarray(i,i+CH));
+  return btoa(s);
+}
+function loadPdfFonts(done){
+  if(_pdfFontsState==="ready"||_pdfFontsState==="failed"){ done(); return; }
+  _pdfWaiters.push(done);
+  if(_pdfFontsState==="loading") return;
+  _pdfFontsState="loading";
+  Promise.all(["Regular","Bold"].map(function(w){
+    return fetch("fonts/NotoSans-"+w+"-tr.ttf?v="+APP_VERSION).then(function(r){
+      if(!r.ok) throw new Error("font "+r.status);
+      return r.arrayBuffer();
+    }).then(bufToB64);
+  })).then(function(r){ _pdfFonts={Regular:r[0],Bold:r[1]}; _pdfFontsState="ready"; })
+    .catch(function(){ _pdfFontsState="failed"; })
+    .then(function(){ var w=_pdfWaiters; _pdfWaiters=[]; w.forEach(function(f){ f(); }); });
+}
+// Dışa aktarma, yazı tipi yüklenene kadar bekler ve sonra kendini yeniden çağırır
+function pdfFontsPending(retry){
+  if(_pdfFontsState==="ready"||_pdfFontsState==="failed") return false;
+  loadPdfFonts(retry); return true;
+}
+function applyPdfFont(doc){
+  if(_pdfFontsState!=="ready"){
+    PDF_FONT="helvetica";
+    // yazı tipi yoksa tüm metinler ASCII'ye çevrilir (eski davranış)
+    var orig=doc.text.bind(doc);
+    doc.text=function(t,x,y,o){ return orig(Array.isArray(t)?t.map(trAscii):trAscii(t),x,y,o); };
+    return;
+  }
+  doc.addFileToVFS("NotoSans-Regular.ttf",_pdfFonts.Regular); doc.addFont("NotoSans-Regular.ttf","NotoSans","normal");
+  doc.addFileToVFS("NotoSans-Bold.ttf",_pdfFonts.Bold); doc.addFont("NotoSans-Bold.ttf","NotoSans","bold");
+  PDF_FONT="NotoSans";
+}
+function hexRgb(h){ h=h.replace("#",""); return [parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)]; }
 
 function getJsPDF(){
   if(window.jspdf&&window.jspdf.jsPDF) return window.jspdf.jsPDF;
@@ -1507,11 +1547,11 @@ function pdfHeader(doc,title,sub){
   doc.setFillColor(99,91,255);
   doc.rect(0,28,210,8,'F');
   doc.setTextColor(255,255,255);
-  doc.setFont("helvetica","bold");
+  doc.setFont(PDF_FONT,"bold");
   doc.setFontSize(15); doc.text(tr(title),14,14);
   doc.setFontSize(9);
   doc.text(tr(st.name)+" | "+tr(sub),14,22);
-  doc.text("Net = Dogru - Yanlis / 3",14,31);
+  doc.text("Net = Doğru - Yanlış / 3",14,31);
   doc.text(new Date().toLocaleDateString("tr-TR"),196,31,{align:"right"});
   doc.setTextColor(30,30,30);
   return 44;
@@ -1523,7 +1563,7 @@ function pdfSection(doc,y,title,r,g,b){
   r=r||79;g=g||70;b=b||229;
   doc.setFillColor(r,g,b);
   doc.roundedRect(14,y,182,8,2,2,'F');
-  doc.setFont("helvetica","bold"); doc.setFontSize(10);
+  doc.setFont(PDF_FONT,"bold"); doc.setFontSize(10);
   doc.setTextColor(255,255,255);
   doc.text(tr(title),17,y+5.5);
   doc.setTextColor(30,30,30);
@@ -1534,11 +1574,11 @@ function pdfSection(doc,y,title,r,g,b){
 function pdfSummaryBox(doc,y,total,correct,wrong,net,extra){
   doc.setFillColor(238,242,255);
   doc.roundedRect(14,y,182,extra?26:18,3,3,'F');
-  doc.setFont("helvetica","bold"); doc.setFontSize(10);
+  doc.setFont(PDF_FONT,"bold"); doc.setFontSize(10);
   doc.setTextColor(60,60,60);
   doc.text("Toplam: "+total+" soru",18,y+7);
-  doc.text("Dogru: "+correct,68,y+7);
-  doc.text("Yanlis: "+wrong,108,y+7);
+  doc.text("Doğru: "+correct,68,y+7);
+  doc.text("Yanlış: "+wrong,108,y+7);
   doc.setTextColor(79,70,229);
   doc.text("Net: "+fnet(net),152,y+7);
   doc.setTextColor(60,60,60);
@@ -1556,19 +1596,20 @@ function pdfSubjRow(doc,y,s,t,c,w,n,pct,prevN,goalT,goalA){
   doc.setFillColor(245,245,255);
   doc.roundedRect(14,y-4,182,22,2,2,'F');
   // Label
-  doc.setFont("helvetica","bold"); doc.setFontSize(10);
+  doc.setFont(PDF_FONT,"bold"); doc.setFontSize(10);
   doc.setTextColor(50,50,50);
-  var label=SUBJ_LABELS[s.id]||"[?]";
-  doc.text(label+" "+tr(s.n),16,y+4);
+  var rgb=hexRgb(s.c);   // emoji yerine ders renginde küçük bir nokta
+  doc.setFillColor(rgb[0],rgb[1],rgb[2]); doc.circle(18,y+2.6,1.7,'F');
+  doc.text(tr(s.n),22,y+4);
   // Stats
-  doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  doc.setFont(PDF_FONT,"normal"); doc.setFontSize(9);
   doc.setTextColor(80,80,80);
   doc.text("Top:"+t,74,y+4);
-  doc.text("Dog:"+c,95,y+4);
+  doc.text("Doğ:"+c,95,y+4);
   doc.text("Yan:"+w,116,y+4);
   doc.text("%"+pct,138,y+4);
   // Net with color
-  doc.setFont("helvetica","bold"); doc.setFontSize(10);
+  doc.setFont(PDF_FONT,"bold"); doc.setFontSize(10);
   doc.setTextColor(n>=0?22:220, n>=0?163:38, n>=0?74:38);
   doc.text("Net:"+fnet(n),152,y+4);
   // Change vs prev
@@ -1577,13 +1618,13 @@ function pdfSubjRow(doc,y,s,t,c,w,n,pct,prevN,goalT,goalA){
     var sign=n>=prevN?"+":"";
     doc.setTextColor(n>=prevN?22:220, n>=prevN?163:38, n>=prevN?74:38);
     doc.setFontSize(8);
-    doc.text(tr("Onceki:"+fnet(prevN)+" ("+sign+delta+")"),16,y+11);
+    doc.text(tr("Önceki:"+fnet(prevN)+" ("+sign+delta+")"),16,y+11);
   }
   // Goal comparison
   if(goalT||goalA){
     var gparts=[];
     if(goalT) gparts.push("Hedef:"+goalT+"s "+(t>=goalT?"OK":Math.round((t/goalT)*100)+"%"));
-    if(goalA) gparts.push("Hdf%"+goalA+" "+(pct>=goalA?"OK":"Suan%"+pct));
+    if(goalA) gparts.push("Hdf%"+goalA+" "+(pct>=goalA?"OK":"Şu an %"+pct));
     doc.setTextColor(100,100,150); doc.setFontSize(8);
     doc.text(gparts.join("  "),prevN!==null&&prevN!==undefined?90:16,y+11);
   }
@@ -1604,15 +1645,16 @@ function pdfSubjRow(doc,y,s,t,c,w,n,pct,prevN,goalT,goalA){
 
 // ── MONTHLY PDF ──────────────────────────────────────────────────
 function exportMonthPDF(){
-  var JsPDF=getJsPDF(); if(!JsPDF){alert("PDF kutuphanesi yuklenemedi.");return;}
-  var doc=new JsPDF();
+  var JsPDF=getJsPDF(); if(!JsPDF){alert("PDF kütüphanesi yüklenemedi.");return;}
+  if(pdfFontsPending(exportMonthPDF)) return;
+  var doc=new JsPDF(); applyPdfFont(doc);
   var p=parseYM(selMonth), ms=mstats(selMonth);
   // Previous month comparison
   var allM=availMonths(), mIdx=allM.indexOf(selMonth);
   var prevM=mIdx>0?allM[mIdx-1]:null;
   var prevMs=prevM?mstats(prevM):null;
 
-  var y=pdfHeader(doc, tr(MONTHS[p.m])+" "+p.y+" - Aylik Rapor", tr(MONTHS[p.m])+" "+p.y);
+  var y=pdfHeader(doc, tr(MONTHS[p.m])+" "+p.y+" - Aylık Rapor", tr(MONTHS[p.m])+" "+p.y);
 
   // Summary with comparison
   var extras=null;
@@ -1620,12 +1662,12 @@ function exportMonthPDF(){
     var netDiff=fnet(ms.net-prevMs.net);
     var sign=ms.net>=prevMs.net?"+":"";
     extras=[
-      tr("Onceki ay: "+(prevM?"":"")+prevMs.total+" soru"),
-      tr("Net degisim: "+sign+netDiff),
-      tr("Aktif gun: "+Object.keys(recs).filter(function(d){return d.startsWith(selMonth)&&dstats(d).total>0;}).length)
+      tr("Önceki ay: "+(prevM?"":"")+prevMs.total+" soru"),
+      tr("Net değişim: "+sign+netDiff),
+      tr("Aktif gün: "+Object.keys(recs).filter(function(d){return d.startsWith(selMonth)&&dstats(d).total>0;}).length)
     ];
   } else {
-    extras=[tr("Aktif gun: "+Object.keys(recs).filter(function(d){return d.startsWith(selMonth)&&dstats(d).total>0;}).length)];
+    extras=[tr("Aktif gün: "+Object.keys(recs).filter(function(d){return d.startsWith(selMonth)&&dstats(d).total>0;}).length)];
   }
   y=pdfSummaryBox(doc,y,ms.total,ms.correct,ms.wrong,ms.net,extras);
   y+=4;
@@ -1634,12 +1676,12 @@ function exportMonthPDF(){
   var monthGoals=goals[selMonth]||{};
   var hasGoals=Object.keys(monthGoals).some(function(k){return monthGoals[k].targetTotal||monthGoals[k].targetAccuracy;});
   if(hasGoals){
-    y=pdfSection(doc,y,"Hedef Karsilastirma",16,163,74);
+    y=pdfSection(doc,y,"Hedef Karşılaştırma",16,163,74);
     var totalGoal=SUBJ.reduce(function(a,s){return a+((monthGoals[s.id]&&monthGoals[s.id].targetTotal)||0);},0);
     if(totalGoal){
       var overallPct=Math.round((ms.total/totalGoal)*100);
-      doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(60,60,60);
-      doc.text(tr("Toplam hedef: "+totalGoal+" soru — Tamamlanan: "+ms.total+" (%"+Math.min(overallPct,100)+")"),16,y);
+      doc.setFont(PDF_FONT,"normal"); doc.setFontSize(9); doc.setTextColor(60,60,60);
+      doc.text(tr("Toplam hedef: "+totalGoal+" soru | Tamamlanan: "+ms.total+" (%"+Math.min(overallPct,100)+")"),16,y);
       // Overall goal bar
       doc.setFillColor(220,220,220); doc.roundedRect(14,y+2,182,4,1,1,'F');
       doc.setFillColor(overallPct>=100?34:79,overallPct>=100?197:70,overallPct>=100?94:229);
@@ -1649,7 +1691,7 @@ function exportMonthPDF(){
   }
 
   // Ders detaylari
-  y=pdfSection(doc,y,"Ders Detaylari");
+  y=pdfSection(doc,y,"Ders Detayları");
   SUBJ.forEach(function(s){
     var ss=mstats(selMonth,s.id);
     if(!ss.total)return;
@@ -1662,7 +1704,7 @@ function exportMonthPDF(){
 
   // Haftalik dagilim
   y+=4;
-  y=pdfSection(doc,y,"Haftalik Dagilim",245,158,11);
+  y=pdfSection(doc,y,"Haftalık Dağılım",245,158,11);
   // Find weeks in this month
   var p2=parseYM(selMonth);
   var firstDay=ds(p2.y,p2.m,1);
@@ -1678,9 +1720,9 @@ function exportMonthPDF(){
     });
     if(wt>0){
       if(y>270){doc.addPage();y=16;}
-      doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(60,60,60);
+      doc.setFont(PDF_FONT,"bold"); doc.setFontSize(9); doc.setTextColor(60,60,60);
       doc.text(weekNum+". Hafta ("+fmtD(ws2)+")",16,y);
-      doc.setFont("helvetica","normal");
+      doc.setFont(PDF_FONT,"normal");
       doc.text("Top:"+wt+"  Dog:"+wc+"  Yan:"+ww,70,y);
       doc.setTextColor(calcNet(wc,ww)>=0?22:220,calcNet(wc,ww)>=0?163:38,calcNet(wc,ww)>=0?74:38);
       doc.text("Net:"+fnet(calcNet(wc,ww)),148,y);
@@ -1695,42 +1737,43 @@ function exportMonthPDF(){
   y+=4;
   var mDays=Object.keys(recs).filter(function(d){return d.startsWith(selMonth)&&dstats(d).total>0;}).sort();
   if(mDays.length>1){
-    y=pdfSection(doc,y,"En Iyi / En Zayif Gun",220,38,38);
+    y=pdfSection(doc,y,"En İyi / En Zayıf Gün",220,38,38);
     var byNet=mDays.map(function(d){var s=dstats(d);return{d:d,net:s.net,total:s.total};});
     byNet.sort(function(a,b){return b.net-a.net;});
-    doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(22,163,74);
-    doc.text("En iyi: "+fmtD(byNet[0].d)+" — Net "+fnet(byNet[0].net)+" ("+byNet[0].total+" soru)",16,y);
+    doc.setFont(PDF_FONT,"bold"); doc.setFontSize(9); doc.setTextColor(22,163,74);
+    doc.text("En iyi: "+fmtD(byNet[0].d)+" | Net "+fnet(byNet[0].net)+" ("+byNet[0].total+" soru)",16,y);
     doc.setTextColor(220,38,38);
-    doc.text("En zayif: "+fmtD(byNet[byNet.length-1].d)+" — Net "+fnet(byNet[byNet.length-1].net),16,y+7);
+    doc.text("En zayıf: "+fmtD(byNet[byNet.length-1].d)+" | Net "+fnet(byNet[byNet.length-1].net),16,y+7);
     doc.setTextColor(30,30,30);
     y+=16;
   }
 
-  doc.save(tr(STUDENTS[curStudent].short).replace(/ /g,"_")+"_"+selMonth+"_rapor.pdf");
+  doc.save(trAscii(STUDENTS[curStudent].short).replace(/ /g,"_")+"_"+selMonth+"_rapor.pdf");
 }
 
 // ── WEEKLY PDF ──────────────────────────────────────────────────
 function exportWeekPDF(){
-  var JsPDF=getJsPDF(); if(!JsPDF){alert("PDF kutuphanesi yuklenemedi.");return;}
-  var doc=new JsPDF();
+  var JsPDF=getJsPDF(); if(!JsPDF){alert("PDF kütüphanesi yüklenemedi.");return;}
+  if(pdfFontsPending(exportWeekPDF)) return;
+  var doc=new JsPDF(); applyPdfFont(doc);
   var days=weekDays(selWeekStart), ws=wstats(selWeekStart);
   var label=fmtD(selWeekStart)+" - "+fmtD(days[6]);
   // Previous week
   var prevWS=addDays(selWeekStart,-7);
   var prevWst=wstats(prevWS);
-  var y=pdfHeader(doc,"Haftalik Rapor",label);
+  var y=pdfHeader(doc,"Haftalık Rapor",label);
 
-  var extras=[tr("Onceki hafta: "+prevWst.total+" soru, Net:"+fnet(prevWst.net))];
+  var extras=[tr("Önceki hafta: "+prevWst.total+" soru, Net:"+fnet(prevWst.net))];
   if(prevWst.total){
     var sign=ws.net>=prevWst.net?"+":"";
-    extras.push(tr("Degisim: "+sign+fnet(ws.net-prevWst.net)));
+    extras.push(tr("Değişim: "+sign+fnet(ws.net-prevWst.net)));
   }
-  extras.push(tr("Aktif gun: "+days.filter(function(d){return dstats(d).total>0;}).length+"/7"));
+  extras.push(tr("Aktif gün: "+days.filter(function(d){return dstats(d).total>0;}).length+"/7"));
   y=pdfSummaryBox(doc,y,ws.total,ws.correct,ws.wrong,ws.net,extras);
   y+=4;
 
   // Gunluk dagilim
-  y=pdfSection(doc,y,"Gunluk Dagilim",245,158,11);
+  y=pdfSection(doc,y,"Günlük Dağılım",245,158,11);
   var dnames=["Pzt","Sal","Car","Per","Cum","Cmt","Paz"];
   var maxDayTotal=Math.max.apply(null,days.map(function(d){return dstats(d).total;}).concat([1]));
   days.forEach(function(d,i){
@@ -1738,13 +1781,13 @@ function exportWeekPDF(){
     if(y>268){doc.addPage();y=16;}
     doc.setFillColor(st.total>0?238:250,st.total>0?242:250,st.total>0?255:250);
     doc.roundedRect(14,y-3,182,10,2,2,'F');
-    doc.setFont("helvetica","bold"); doc.setFontSize(9);
+    doc.setFont(PDF_FONT,"bold"); doc.setFontSize(9);
     doc.setTextColor(st.total>0?50:180,st.total>0?50:180,st.total>0?50:180);
     doc.text(dnames[i]+" "+fmtD(d),16,y+4);
     if(st.total>0){
-      doc.setFont("helvetica","normal");
+      doc.setFont(PDF_FONT,"normal");
       doc.text("Top:"+st.total+"  Dog:"+st.correct+"  Yan:"+st.wrong,60,y+4);
-      doc.setFont("helvetica","bold");
+      doc.setFont(PDF_FONT,"bold");
       doc.setTextColor(st.net>=0?22:220,st.net>=0?163:38,st.net>=0?74:38);
       doc.text("Net:"+fnet(st.net),148,y+4);
       // Mini bar
@@ -1752,15 +1795,15 @@ function exportWeekPDF(){
       var cpct=st.total>0?st.correct/st.total:0;
       doc.setFillColor(34,197,94); doc.rect(14,y+5,182*(st.total/maxDayTotal)*cpct,2,'F');
     } else {
-      doc.setTextColor(180,180,180); doc.setFont("helvetica","normal"); doc.setFontSize(8);
-      doc.text("Calisma yok",60,y+4);
+      doc.setTextColor(180,180,180); doc.setFont(PDF_FONT,"normal"); doc.setFontSize(8);
+      doc.text("Çalışma yok",60,y+4);
     }
     doc.setTextColor(30,30,30); y+=12;
   });
   y+=4;
 
   // Ders bazli
-  y=pdfSection(doc,y,"Ders Detaylari");
+  y=pdfSection(doc,y,"Ders Detayları");
   SUBJ.forEach(function(s){
     var t=0,c=0,w=0;
     days.forEach(function(d){var r=(recs[d]&&recs[d][s.id])||{};t+=r.total||0;c+=r.correct||0;w+=cw(r.total||0,r.correct||0);});
@@ -1773,13 +1816,14 @@ function exportWeekPDF(){
     y=pdfSubjRow(doc,y,s,t,c,w,calcNet(c,w),pct,prevN2,0,0);
   });
 
-  doc.save(tr(STUDENTS[curStudent].short).replace(/ /g,"_")+"_haftalik_"+selWeekStart+".pdf");
+  doc.save(trAscii(STUDENTS[curStudent].short).replace(/ /g,"_")+"_haftalik_"+selWeekStart+".pdf");
 }
 
 // ── STATS PDF ──────────────────────────────────────────────────
 function exportStatsPDF(){
-  var JsPDF=getJsPDF(); if(!JsPDF){alert("PDF kutuphanesi yuklenemedi.");return;}
-  var doc=new JsPDF();
+  var JsPDF=getJsPDF(); if(!JsPDF){alert("PDF kütüphanesi yüklenemedi.");return;}
+  if(pdfFontsPending(exportStatsPDF)) return;
+  var doc=new JsPDF(); applyPdfFont(doc);
   var allDays=Object.keys(recs).filter(function(d){return d>=START;}).sort();
   var sat=SUBJ.map(function(s){
     var t=allDays.reduce(function(a,d){return a+((recs[d]&&recs[d][s.id]&&recs[d][s.id].total)||0);},0);
@@ -1792,18 +1836,18 @@ function exportStatsPDF(){
   var gw=sat.reduce(function(a,s){return a+s.wrong;},0);
   var active=allDays.filter(function(d){return dstats(d).total>0;}).length;
   var gn=calcNet(gc,gw);
-  var y=pdfHeader(doc,"Genel Istatistik Raporu","Tum Zamanlar");
+  var y=pdfHeader(doc,"Genel İstatistik Raporu","Tüm Zamanlar");
 
   var extras=[
-    tr("Aktif gun: "+active),
-    tr("Toplam yanlis: "+gw),
-    gt>0?tr("Dogru orani: %"+Math.round((gc/gt)*100)):""
+    tr("Aktif gün: "+active),
+    tr("Toplam yanlış: "+gw),
+    gt>0?tr("Doğru oranı: %"+Math.round((gc/gt)*100)):""
   ];
   y=pdfSummaryBox(doc,y,gt,gc,gw,gn,extras);
   y+=4;
 
   // Ders siralaması
-  y=pdfSection(doc,y,"Ders Siralaması (Toplama Gore)");
+  y=pdfSection(doc,y,"Ders Sıralaması (Toplama Göre)");
   sat.slice().sort(function(a,b){return b.total-a.total;}).forEach(function(s,i){
     if(!s.total)return;
     var pct=Math.round((s.correct/s.total)*100);
@@ -1813,17 +1857,17 @@ function exportStatsPDF(){
   // Monthly breakdown — page 2
   doc.addPage(); y=16;
   doc.setFillColor(79,70,229); doc.rect(0,0,210,12,'F');
-  doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor(255,255,255);
-  doc.text(tr(STUDENTS[curStudent].name)+" | Aylik Gelisim",14,8);
+  doc.setFont(PDF_FONT,"bold"); doc.setFontSize(10); doc.setTextColor(255,255,255);
+  doc.text(tr(STUDENTS[curStudent].name)+" | Aylık Gelişim",14,8);
   doc.setTextColor(30,30,30); y=20;
 
   // Table header
   doc.setFillColor(238,242,255); doc.rect(14,y,182,8,'F');
-  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(60,60,60);
+  doc.setFont(PDF_FONT,"bold"); doc.setFontSize(8); doc.setTextColor(60,60,60);
   doc.text("Ay",16,y+5.5);
-  doc.text("Toplam",50,y+5.5); doc.text("Dogru",80,y+5.5);
-  doc.text("Yanlis",108,y+5.5); doc.text("Net",136,y+5.5);
-  doc.text("Ort/Gun",155,y+5.5); doc.text("Degisim",178,y+5.5);
+  doc.text("Toplam",50,y+5.5); doc.text("Doğru",80,y+5.5);
+  doc.text("Yanlış",108,y+5.5); doc.text("Net",136,y+5.5);
+  doc.text("Ort/Gün",155,y+5.5); doc.text("Değişim",178,y+5.5);
   y+=10;
 
   var prevMonthNet=null;
@@ -1838,17 +1882,17 @@ function exportStatsPDF(){
     // Alternate row bg
     var rowIdx=availMonths().indexOf(ymStr);
     if(rowIdx%2===0){doc.setFillColor(248,248,255); doc.rect(14,y-3,182,8,'F');}
-    doc.setFont("helvetica","bold"); doc.setFontSize(8);
+    doc.setFont(PDF_FONT,"bold"); doc.setFontSize(8);
     doc.setTextColor(79,70,229); doc.text(tr(MONTHS[p3.m])+" "+p3.y,16,y+2);
-    doc.setFont("helvetica","normal"); doc.setTextColor(60,60,60);
+    doc.setFont(PDF_FONT,"normal"); doc.setTextColor(60,60,60);
     doc.text(String(ms2.total),50,y+2);
     doc.setTextColor(22,163,74); doc.text(String(ms2.correct),80,y+2);
     doc.setTextColor(220,38,38); doc.text(String(ms2.wrong),108,y+2);
-    doc.setFont("helvetica","bold");
+    doc.setFont(PDF_FONT,"bold");
     doc.setTextColor(ms2.net>=0?22:220,ms2.net>=0?163:38,ms2.net>=0?74:38);
     doc.text(String(fnet(ms2.net)),136,y+2);
-    doc.setFont("helvetica","normal"); doc.setTextColor(60,60,60);
-    doc.text(String(avgPerDay)+"/gun",155,y+2);
+    doc.setFont(PDF_FONT,"normal"); doc.setTextColor(60,60,60);
+    doc.text(String(avgPerDay)+"/gün",155,y+2);
     if(prevMonthNet!==null){
       doc.setTextColor(ms2.net>=prevMonthNet?22:220,ms2.net>=prevMonthNet?163:38,ms2.net>=prevMonthNet?74:38);
       doc.text((ms2.net>=prevMonthNet?"+":"")+delta,178,y+2);
@@ -1859,7 +1903,7 @@ function exportStatsPDF(){
     y+=8; prevMonthNet=ms2.net;
   });
 
-  doc.save(tr(STUDENTS[curStudent].short).replace(/ /g,"_")+"_istatistik.pdf");
+  doc.save(trAscii(STUDENTS[curStudent].short).replace(/ /g,"_")+"_istatistik.pdf");
 }
 
 // ═══════════════════════════════════════════════════════════════════
