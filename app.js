@@ -390,16 +390,31 @@ function saveField(sid,field,val){
   var dateAtEdit=selDate, studentAtEdit=curStudent;
   var achKey=studentAtEdit+"|"+dateAtEdit+"|"+sid;
   clearTimeout(_achTimers[achKey]);   // yeni bir düzenleme geldi, bekleyen kutlama iptal (yanlış girilip düzeltilebilir)
-  clearTimeout(saveTimers[sid]); syncState("saving");
-  saveTimers[sid]=setTimeout(function(){
-    targetRef.set({total:t,correct:c})
-      .then(function(){
-        syncState("ok");
-        // Kayıt başarılı olunca rekor kontrolü, düzenleme durduktan birkaç saniye sonra yapılır
-        scheduleAchievement(achKey,dateAtEdit,sid,studentAtEdit);
-      }).catch(function(){syncState("error");});
+  _pendingWrites[achKey]={ref:targetRef,data:{total:t,correct:c}};
+  clearTimeout(saveTimers[achKey]); syncState("saving");
+  saveTimers[achKey]=setTimeout(function(){
+    var w=writeRecord(achKey); if(!w) return;
+    w.then(function(){
+      syncState("ok");
+      // Kayıt başarılı olunca rekor kontrolü, düzenleme durduktan birkaç saniye sonra yapılır
+      scheduleAchievement(achKey,dateAtEdit,sid,studentAtEdit);
+    }).catch(function(){syncState("error");});
   },700);
 }
+
+// Bekleyen kayıtlar 700 ms gecikmeyle yazılır. Sekme kapanırken ya da arka plana alınırken hemen yazılır,
+// böylece son girilen değer kaybolmaz. Anahtar: öğrenci|gün|ders (gün ya da ders değişse de kayıt karışmaz)
+var _pendingWrites={};
+function writeRecord(key){
+  var p=_pendingWrites[key]; if(!p) return null;
+  delete _pendingWrites[key]; clearTimeout(saveTimers[key]);
+  return p.ref.set(p.data);
+}
+function flushPendingWrites(){
+  Object.keys(_pendingWrites).forEach(function(k){ var w=writeRecord(k); if(w) w.catch(function(){}); });
+}
+window.addEventListener("pagehide",flushPendingWrites);
+document.addEventListener("visibilitychange",function(){ if(document.visibilityState==="hidden") flushPendingWrites(); });
 
 // Kutlama, son düzenlemeden yaklaşık 2,5 sn sonra (700 ms kayıt gecikmesi + 1,8 sn) gösterilir
 var _achTimers={};
