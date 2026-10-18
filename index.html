@@ -1306,6 +1306,57 @@ function statsSelLabel(){
   var sel=statsSelMonths.filter(function(m){ return all.indexOf(m)>=0; });
   return sel.length?sel.map(smLabel).join(", "):"Tüm aylar";
 }
+// ── Rekorlar: en yüksek günlük soru sayısı (ders bazında ve günlük toplam) ──
+function shortD(d){ var p=d.split("-"); return p[2]+"/"+p[1]+"/"+p[0].slice(2); }
+// monthsFilter: ay listesi (null ise tüm zamanlar). Dönüş: {value, date} (eşitlikte en erken gün)
+function bestDay(r,sid,monthsFilter){
+  var best={value:0,date:null};
+  Object.keys(r).sort().forEach(function(d){
+    if(d<START) return;
+    if(monthsFilter&&monthsFilter.indexOf(d.slice(0,7))<0) return;
+    var v=dayCount(r,d,sid);
+    if(v>best.value){ best.value=v; best.date=d; }
+  });
+  return best;
+}
+function statsRecordsCard(){
+  var use=smUseMonths();
+  var items=SUBJ.map(function(s){ return {sid:s.id,label:s.e+" "+s.n}; });
+  items.push({sid:null,label:"📚 Günlük toplam"});
+  var rows="", any=false;
+  items.forEach(function(it){
+    var sel=bestDay(recs,it.sid,use), all=bestDay(recs,it.sid,null);
+    if(!all.value) return;
+    any=true;
+    var inSel=sel.value>0&&sel.value===all.value;   // tüm zamanların rekoru seçili aylarda kırılmış
+    rows+='<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid #f3f4f6">'
+      +'<div style="font-size:12px;font-weight:800;color:#333">'+it.label+'</div>'
+      +'<div style="text-align:center">'+(sel.value
+        ?'<div style="font-size:14px;font-weight:900;color:var(--p)">'+sel.value+'</div><div style="font-size:9px;color:#aaa;font-weight:700">'+shortD(sel.date)+'</div>'
+        :'<div style="font-size:11px;color:#ddd">—</div>')+'</div>'
+      +'<div style="text-align:center"><div style="font-size:14px;font-weight:900;color:#d97706">'+(inSel?"🏆 ":"")+all.value+'</div><div style="font-size:9px;color:#aaa;font-weight:700">'+shortD(all.date)+'</div></div>'
+      +'</div>';
+  });
+  if(!any) return "";
+  // Seçili her ay için günlük toplam rekoru
+  var perMonth="";
+  if(use.length>1){
+    perMonth='<div style="font-size:11px;font-weight:800;color:#888;margin:12px 0 6px">Aylık günlük toplam rekorları</div><div style="display:flex;gap:6px;flex-wrap:wrap">'
+      +use.map(function(m){
+        var b=bestDay(recs,null,[m]); if(!b.value) return "";
+        return '<div style="background:#EEF2FF;border-radius:10px;padding:6px 10px;text-align:center"><div style="font-size:10px;font-weight:800;color:var(--p)">'+smLabel(m)+'</div>'
+          +'<div style="font-size:14px;font-weight:900;color:#222">'+b.value+'</div><div style="font-size:9px;color:#aaa;font-weight:700">'+shortD(b.date)+'</div></div>';
+      }).join("")+'</div>';
+  }
+  return '<div class="card"><div class="card-ttl" style="margin-bottom:4px">🏅 Rekorlar <span style="font-size:11px;color:#aaa;font-weight:700">· '+statsSelLabel()+'</span></div>'
+    +'<div style="font-size:11px;color:#aaa;font-weight:700;margin-bottom:8px">En yüksek günlük soru sayısı</div>'
+    +'<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;font-size:10px;font-weight:800;color:#aaa;padding-bottom:4px;border-bottom:2px solid #f3f4f6">'
+    +'<div></div><div style="text-align:center">Seçili aylar</div><div style="text-align:center">Tüm zamanlar</div></div>'
+    +rows
+    +'<div style="font-size:10px;color:#aaa;font-weight:700;margin-top:6px">🏆 tüm zamanların rekoru seçili aylarda kırılmış</div>'
+    +perMonth+'</div>';
+}
+
 function statsMonthCard(){
   var all=statsDataMonths();
   var sel=statsSelMonths.filter(function(m){ return all.indexOf(m)>=0; });
@@ -1446,6 +1497,7 @@ function renderStats(){
     +'<div style="font-size:11px;color:#aaa;font-weight:700;margin-top:2px">= Doğru − Yanlış÷3</div></div>'
     +ring(gap,"var(--p)",70)+'</div>'
     +statsMonthCard()
+    +statsRecordsCard()
     // Radar chart (all subjects except Deneme)
     +(gt>0?'<div class="card"><div class="card-ttl">🕸️ Ders Radar Analizi <span style="font-size:11px;color:#aaa;font-weight:600">(Deneme hariç · '+statsSelLabel()+')</span></div><div style="position:relative;height:280px"><canvas id="radarChart"></canvas></div></div>':"")
     // Monthly line chart
