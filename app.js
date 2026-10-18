@@ -253,7 +253,8 @@ function showPicker(){
   // Detach old listeners
   if(recRef&&recListener) recRef.off("value",recListener);
   if(goalRef&&goalListener) goalRef.off("value",goalListener);
-  recs={}; goals={}; cmpRecs={};
+  if(denemeRef&&denemeListener) denemeRef.off("value",denemeListener);
+  recs={}; goals={}; cmpRecs={}; denemeler={}; closeDenemeForm();
   var wasTeacher=_teacherMode;
   curStudent=null; _teacherMode=false;
   if(!wasTeacher){
@@ -292,7 +293,8 @@ function pickStudent(sid){
     }
     if(recRef&&recListener)recRef.off("value",recListener);
     if(goalRef&&goalListener)goalRef.off("value",goalListener);
-    recs={}; goals={}; cmpRecs={};
+    if(denemeRef&&denemeListener) denemeRef.off("value",denemeListener);
+    recs={}; goals={}; cmpRecs={}; denemeler={};
     resetSessionUI();
     selDate=today(); selMonth=ymNow(); selWeekStart=weekStart(today());
     expSubj=null;
@@ -355,6 +357,12 @@ function pickStudent(sid){
     goalListener=goalRef.on("value",function(snap){
       goals=snap.val()||{}; render();
     });
+    // Genel Deneme ders bazlı sonuçları (denemeler/<öğrenci>)
+    denemeErr=false;
+    denemeRef=db.ref("denemeler/"+sid);
+    denemeListener=denemeRef.on("value",function(snap){
+      denemeler=snap.val()||{}; denemeErr=false; if(curView==="stats") renderStats();
+    },function(){ denemeler={}; denemeErr=true; });
     loadProfilePics();
     gv("daily");
   }catch(e){alert("Giris hatasi: "+e.message); console.error(e);}
@@ -693,6 +701,7 @@ function renderDaily(){
           +'<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-top:4px">'
           +'<div style="display:flex;gap:10px"><span style="color:#15803d">✓%'+cpct+'</span><span style="color:#dc2626">✗%'+wpct+'</span></div>'
           +'<span id="nv-'+s.id+'" style="color:'+(n>=0?"#15803d":"#dc2626")+'">Net: '+fnet(n)+'</span></div>':"")
+        +(s.id==="deneme"&&!READONLY&&!_teacherMode?'<button onclick="openDenemeForm()" style="width:100%;margin-top:10px;padding:10px;border-radius:12px;border:2px solid '+s.c+';background:white;color:'+s.d+';font-size:13px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif">📝 Ders bazlı deneme sonucu ekle</button>':"")
         +'<div style="background:#EEF2FF;border-radius:10px;padding:6px 10px;margin-top:10px;font-size:12px;color:#4F46E5;font-weight:700">ℹ️ Net = Doğru − Yanlış ÷ 3</div>'
         +'</div>';
     }
@@ -1124,6 +1133,192 @@ function statsSelLabel(){
   var sel=statsSelMonths.filter(function(m){ return all.indexOf(m)>=0; });
   return sel.length?sel.map(smLabel).join(", "):"Tüm aylar";
 }
+// ═══════════════════════════════════════════════════════════════════
+//  GENEL DENEME: ders bazlı doğru/yanlış, ders netleri, ağırlıklı net ve tahmini LGS puanı
+//  Katsayılar ve soru sayıları (üçüncü taraf LGS kaynakları, MEB rehberleriyle uyumlu): Türkçe, Matematik, Fen
+//  Bilimleri 4 katsayı (20 soru); T.C. İnkılap Tarihi, Din Kültürü, Yabancı Dil 1 katsayı (10 soru). Toplam 90 soru.
+//  Resmi LGS puanı her yıl tüm adayların ortalama ve standart sapmasına göre standart puan olarak hesaplanır.
+//  Burada gösterilen puan, ağırlıklı netin 100-500 aralığına doğrusal ölçeklenmesidir (yaklaşık, ilerlemeyi izlemek için).
+// ═══════════════════════════════════════════════════════════════════
+var LGS_DERSLER=[
+  {id:"turkce",n:"Türkçe",s:"Tür",k:4,q:20},
+  {id:"matematik",n:"Matematik",s:"Mat",k:4,q:20},
+  {id:"fen",n:"Fen Bilimleri",s:"Fen",k:4,q:20},
+  {id:"sosyal",n:"İnkılap Tarihi",s:"İnk",k:1,q:10},
+  {id:"din",n:"Din Kültürü",s:"Din",k:1,q:10},
+  {id:"ingilizce",n:"İngilizce",s:"İng",k:1,q:10}
+];
+var denemeler={}, denemeRef=null, denemeListener=null, denemeErr=false;
+
+function estimateLgsPuan(weighted,maxWeighted){
+  return Math.round(Math.max(100,Math.min(500,100+400*weighted/maxWeighted)));
+}
+// d: {turkce:{c:doğru,w:yanlış},...}. Boş soru ayrıca tutulmaz (net hesabını etkilemez)
+function denemeSonuc(d){
+  var nets={}, total=0, weighted=0, maxW=0;
+  LGS_DERSLER.forEach(function(s){
+    var x=(d&&d[s.id])||{}, net=calcNet(x.c||0,x.w||0);
+    nets[s.id]=net; total+=net; weighted+=net*s.k; maxW+=s.q*s.k;
+  });
+  return {nets:nets,total:total,weighted:weighted,maxWeighted:maxW,puan:estimateLgsPuan(weighted,maxW)};
+}
+function escHtml(x){
+  return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+// Bir günün tüm denemelerinin toplamı günlük "Genel Deneme" kaydına yazılır (soru: doğru+yanlış, doğru: doğru)
+function syncDenemeDaily(date){
+  var tot=0, cor=0;
+  Object.keys(denemeler).forEach(function(k){
+    var r=denemeler[k]; if(!r||r.date!==date) return;
+    LGS_DERSLER.forEach(function(s){ var x=r.d&&r.d[s.id]; if(x){ tot+=(x.c||0)+(x.w||0); cor+=(x.c||0); } });
+  });
+  var ref=recRef.child(date).child("deneme");
+  if(tot>0){ if(!recs[date]) recs[date]={}; recs[date].deneme={total:tot,correct:cor}; return ref.set({total:tot,correct:cor}); }
+  if(recs[date]) delete recs[date].deneme;
+  return ref.remove();
+}
+
+var _dnEditId=null;
+function closeDenemeForm(){
+  var el=document.getElementById("dn-pop"); if(el&&el.parentNode) el.parentNode.removeChild(el);
+}
+function dnInputVals(){
+  var out={}, err="";
+  LGS_DERSLER.forEach(function(s){
+    var c=document.getElementById("dn-c-"+s.id).value, w=document.getElementById("dn-w-"+s.id).value;
+    var ci=c===""?0:parseInt(c,10), wi=w===""?0:parseInt(w,10);
+    if(isNaN(ci)||isNaN(wi)||ci<0||wi<0){ err="Sayılar 0 ya da daha büyük tam sayı olmalı."; }
+    else if(ci+wi>s.q){ err=s.n+": doğru ve yanlış toplamı "+s.q+" soruyu geçemez."; }
+    out[s.id]={c:Math.max(0,ci||0),w:Math.max(0,wi||0)};
+  });
+  return {d:out,err:err};
+}
+function updateDenemePreview(){
+  var v=dnInputVals(), r=denemeSonuc(v.d);
+  var el=document.getElementById("dn-preview"), er=document.getElementById("dn-err");
+  if(er) er.textContent=v.err;
+  if(el) el.innerHTML='<b>Toplam net: '+fnet(r.total)+'</b> · Ağırlıklı net: '+fnet(r.weighted)+' / '+r.maxWeighted
+    +'<br><span style="color:var(--p);font-weight:900">≈ '+r.puan+' puan</span> <span style="color:#666">(yaklaşık)</span>';
+}
+function openDenemeForm(id){
+  if(!curStudent||READONLY||_teacherMode) return;
+  closeDenemeForm();
+  _dnEditId=id||null;
+  var ex=id?denemeler[id]:null;
+  var date=ex?ex.date:(selDate<=today()?selDate:today());
+  var inp='width:100%;padding:8px 4px;border-radius:10px;border:2px solid #e5e7eb;text-align:center;font-size:16px;font-weight:800;font-family:Nunito,sans-serif';
+  var rows=LGS_DERSLER.map(function(s){
+    var x=(ex&&ex.d&&ex.d[s.id])||null;
+    return '<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;align-items:center;margin-bottom:6px">'
+      +'<div style="font-size:13px;font-weight:800;color:#333;text-align:left">'+s.n+' <span style="color:#666;font-weight:700">('+s.q+')</span></div>'
+      +'<input id="dn-c-'+s.id+'" type="number" inputmode="numeric" min="0" max="'+s.q+'" aria-label="'+s.n+' doğru" placeholder="Doğru" value="'+(x?x.c:"")+'" oninput="updateDenemePreview()" style="'+inp+';border-color:#86c99a">'
+      +'<input id="dn-w-'+s.id+'" type="number" inputmode="numeric" min="0" max="'+s.q+'" aria-label="'+s.n+' yanlış" placeholder="Yanlış" value="'+(x?x.w:"")+'" oninput="updateDenemePreview()" style="'+inp+';border-color:#f0a0a0">'
+      +'</div>';
+  }).join("");
+  var pop=document.createElement("div");
+  pop.id="dn-pop"; pop.setAttribute("role","dialog"); pop.setAttribute("aria-modal","true"); pop.setAttribute("aria-label","Deneme sonucu");
+  pop.style.cssText="position:fixed;inset:0;background:#0007;z-index:998;display:flex;align-items:flex-start;justify-content:center;padding:14px;overflow:auto";
+  pop.innerHTML='<div style="background:white;border-radius:22px;padding:20px 16px;max-width:380px;width:100%;box-shadow:0 20px 60px #0004;margin:auto">'
+    +'<div style="font-size:16px;font-weight:900;color:#222;margin-bottom:10px">📝 '+(id?"Deneme sonucunu düzenle":"Deneme sonucu ekle")+'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1.4fr;gap:6px;margin-bottom:10px">'
+    +'<input id="dn-date" type="date" min="'+START+'" max="'+today()+'" value="'+date+'" aria-label="Deneme tarihi" style="'+inp+';font-size:14px">'
+    +'<input id="dn-name" type="text" maxlength="60" placeholder="Deneme adı (isteğe bağlı)" aria-label="Deneme adı" value="'+escHtml(ex&&ex.name)+'" style="'+inp+';font-size:13px;font-weight:700">'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;font-size:12px;font-weight:800;color:#666;margin-bottom:4px"><div></div><div style="text-align:center;color:#15803d">Doğru</div><div style="text-align:center;color:#dc2626">Yanlış</div></div>'
+    +rows
+    +'<div id="dn-preview" style="background:#EEF2FF;border-radius:12px;padding:10px;font-size:13px;font-weight:700;color:#333;margin-top:8px;text-align:center"></div>'
+    +'<div id="dn-err" role="alert" style="font-size:12px;font-weight:800;color:#dc2626;min-height:16px;margin-top:6px;text-align:center"></div>'
+    +'<div style="font-size:11px;color:#666;font-weight:700;margin:4px 0 10px">Boş sorular yazılmaz, net hesabını etkilemez. Kaydedince o günün "Genel Deneme" toplamı otomatik güncellenir. Puan, ağırlıklı netten yapılan yaklaşık bir tahmindir.</div>'
+    +'<div style="display:flex;gap:8px"><button onclick="closeDenemeForm()" style="flex:1;padding:12px;border-radius:12px;border:2px solid #e5e7eb;background:white;font-size:13px;font-weight:800;color:#666;font-family:Nunito,sans-serif;cursor:pointer">İptal</button>'
+    +'<button id="dn-save" onclick="saveDeneme()" style="flex:2;padding:12px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--p),var(--v));color:white;font-size:14px;font-weight:900;font-family:Nunito,sans-serif;cursor:pointer">💾 Kaydet</button></div></div>';
+  document.body.appendChild(pop);
+  updateDenemePreview();
+}
+function saveDeneme(){
+  if(!curStudent||READONLY||_teacherMode||!denemeRef) return;
+  var v=dnInputVals(), er=document.getElementById("dn-err");
+  var date=document.getElementById("dn-date").value, name=document.getElementById("dn-name").value.trim().slice(0,60);
+  var any=LGS_DERSLER.some(function(s){ return v.d[s.id].c+v.d[s.id].w>0; });
+  if(v.err){ er.textContent=v.err; return; }
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date<START||date>today()){ er.textContent="Geçerli bir tarih seçin."; return; }
+  if(!any){ er.textContent="En az bir derse doğru ya da yanlış sayısı girin."; return; }
+  var btn=document.getElementById("dn-save"); btn.disabled=true; btn.textContent="⏳ Kaydediliyor...";
+  var rec={date:date,d:v.d}; if(name) rec.name=name;
+  var oldDate=_dnEditId&&denemeler[_dnEditId]?denemeler[_dnEditId].date:null;
+  var ref=_dnEditId?denemeRef.child(_dnEditId):denemeRef.push();
+  ref.set(rec).then(function(){
+    denemeler[ref.key]=rec;
+    var jobs=[syncDenemeDaily(date)];
+    if(oldDate&&oldDate!==date) jobs.push(syncDenemeDaily(oldDate));
+    return Promise.all(jobs);
+  }).then(function(){
+    closeDenemeForm(); render();
+  }).catch(function(e){
+    btn.disabled=false; btn.textContent="💾 Kaydet";
+    er.textContent="Kaydedilemedi"+((e&&e.code==="PERMISSION_DENIED")?": izin yok. Firebase kuralları 'denemeler' yolunu içermiyor olabilir (firebase/KURULUM.md).":".");
+  });
+}
+function deleteDeneme(id){
+  var r=denemeler[id]; if(!r||READONLY||_teacherMode) return;
+  if(!confirm(fmtD(r.date)+" tarihli deneme sonucu silinsin mi?")) return;
+  denemeRef.child(id).remove().then(function(){
+    delete denemeler[id];
+    return syncDenemeDaily(r.date);
+  }).then(function(){ render(); }).catch(function(){ alert("Silinemedi."); });
+}
+
+// İstatistik sayfası: seçili aylardaki deneme sonuçları, ders netleri ve tahmini puan
+function statsDenemeCard(){
+  var use=smUseMonths(), edit=!READONLY&&!_teacherMode;
+  var list=Object.keys(denemeler).map(function(k){ return {id:k,r:denemeler[k]}; })
+    .filter(function(x){ return x.r&&x.r.date&&use.indexOf(x.r.date.slice(0,7))>=0; })
+    .sort(function(a,b){ return a.r.date<b.r.date?1:a.r.date>b.r.date?-1:0; });
+  var head='<div class="card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div class="card-ttl" style="margin:0;flex:1">📝 Deneme Sonuçları <span style="font-size:12px;color:#666;font-weight:700">· '+statsSelLabel()+'</span></div>'
+    +(edit?'<button onclick="openDenemeForm()" style="padding:8px 12px;border-radius:10px;border:none;background:var(--p);color:white;font-size:12px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif">➕ Ekle</button>':'')+'</div>';
+  if(denemeErr) return head+'<div style="font-size:12px;color:#dc2626;font-weight:700;padding:8px 0">Deneme sonuçları okunamadı (Firebase kuralları güncellenmemiş olabilir).</div></div>';
+  if(!list.length) return head+'<div style="font-size:12px;color:#666;font-weight:700;padding:8px 0">Seçili aylarda ders bazlı deneme sonucu yok.'+(edit?' "Ekle" ile ilk denemeni girebilirsin.':'')+'</div></div>';
+  var rows=list.map(function(x){
+    var r=x.r, s=denemeSonuc(r.d);
+    var chips=LGS_DERSLER.map(function(d){
+      var n=s.nets[d.id];
+      return '<span style="display:inline-block;background:#f3f4f6;border-radius:8px;padding:3px 7px;font-size:11px;font-weight:800;color:#333;margin:0 4px 4px 0">'+d.s+' <span style="color:'+(n>=0?"#15803d":"#dc2626")+'">'+fnet(n)+'</span></span>';
+    }).join("");
+    return '<div style="padding:10px 0;border-bottom:1px solid #f3f4f6">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div style="flex:1;font-size:13px;font-weight:900;color:#333">'+fmtD(r.date)+(r.name?' <span style="color:#666;font-weight:700">· '+escHtml(r.name)+'</span>':'')+'</div>'
+      +'<div style="font-size:14px;font-weight:900;color:var(--p)">≈ '+s.puan+'</div></div>'
+      +'<div style="font-size:12px;font-weight:700;color:#666;margin-bottom:4px">Toplam net <b style="color:#333">'+fnet(s.total)+'</b> / 90 · Ağırlıklı '+fnet(s.weighted)+' / '+s.maxWeighted+'</div>'
+      +'<div>'+chips+'</div>'
+      +(edit?'<div style="display:flex;gap:6px;margin-top:2px"><button onclick="openDenemeForm(\''+x.id+'\')" style="padding:5px 10px;border-radius:8px;border:2px solid #e5e7eb;background:white;font-size:11px;font-weight:800;color:#555;cursor:pointer;font-family:Nunito,sans-serif">Düzenle</button>'
+        +'<button onclick="deleteDeneme(\''+x.id+'\')" style="padding:5px 10px;border-radius:8px;border:2px solid #fecaca;background:white;font-size:11px;font-weight:800;color:#dc2626;cursor:pointer;font-family:Nunito,sans-serif">Sil</button></div>':'')
+      +'</div>';
+  }).join("");
+  var chart=list.length>1?'<div style="font-size:12px;font-weight:800;color:#666;margin:12px 0 6px">Gelişim: toplam net ve tahmini puan</div><div style="position:relative;height:220px"><canvas id="dn-trend" role="img" aria-label="Deneme toplam net ve tahmini puan grafiği"></canvas></div>':"";
+  return head+rows+chart
+    +'<div style="font-size:11px;color:#666;font-weight:700;margin-top:8px">Net = Doğru − Yanlış ÷ 3. Ağırlıklı net: Türkçe, Matematik, Fen ×4, diğerleri ×1 (en fazla 270). ≈ puan, ağırlıklı netin 100-500 aralığına doğrusal ölçeklenmesidir; resmi LGS puanı her yıl tüm adayların ortalama ve standart sapmasına göre hesaplanır.</div></div>';
+}
+function drawDenemeChart(){
+  destroyChart("dn");
+  var el=document.getElementById("dn-trend"); if(!el) return;
+  var use=smUseMonths();
+  var list=Object.keys(denemeler).map(function(k){ return denemeler[k]; })
+    .filter(function(r){ return r&&r.date&&use.indexOf(r.date.slice(0,7))>=0; })
+    .sort(function(a,b){ return a.date<b.date?-1:a.date>b.date?1:0; });
+  if(list.length<2) return;
+  var res=list.map(function(r){ return denemeSonuc(r.d); });
+  _charts["dn"]=new Chart(el,{
+    type:"line",
+    data:{labels:list.map(function(r){ return shortD(r.date).slice(0,5); }),datasets:[
+      {label:"Toplam net",data:res.map(function(s){ return fnet(s.total); }),borderColor:"#4F46E5",backgroundColor:"#4F46E5",borderWidth:2.5,pointStyle:"circle",pointRadius:5,tension:0.2,yAxisID:"y"},
+      {label:"Tahmini puan",data:res.map(function(s){ return s.puan; }),borderColor:"#d97706",backgroundColor:"#d97706",borderWidth:2.5,borderDash:[6,3],pointStyle:"rect",pointRadius:5,tension:0.2,yAxisID:"y2"}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:12},boxWidth:14,usePointStyle:true}}},
+      scales:{x:{grid:{display:false},ticks:{font:{family:"Nunito",size:11}}},
+        y:{beginAtZero:true,max:90,grid:{color:"#f3f4f6"},ticks:{font:{family:"Nunito",size:11}},title:{display:true,text:"Net",font:{size:11}}},
+        y2:{position:"right",min:100,max:500,grid:{display:false},ticks:{font:{family:"Nunito",size:11}},title:{display:true,text:"Puan",font:{size:11}}}}}
+  });
+}
+
 // ── Rekorlar: en yüksek günlük soru sayısı (ders bazında ve günlük toplam) ──
 function shortD(d){ var p=d.split("-"); return p[2]+"/"+p[1]+"/"+p[0].slice(2); }
 // monthsFilter: ay listesi (null ise tüm zamanlar). Dönüş: {value, date} (eşitlikte en erken gün)
@@ -1316,6 +1511,7 @@ function renderStats(){
     +ring(gap,"var(--p)",70)+'</div>'
     +statsMonthCard()
     +statsRecordsCard()
+    +statsDenemeCard()
     // Radar chart (all subjects except Deneme)
     +(gt>0?'<div class="card"><div class="card-ttl">🕸️ Ders Radar Analizi <span style="font-size:12px;color:#767676;font-weight:600">(Deneme hariç · '+statsSelLabel()+')</span></div><div style="position:relative;height:280px"><canvas id="radarChart" role="img" aria-label="Ders doğruluk radar grafiği"></canvas></div></div>':"")
     // Monthly line chart
@@ -1334,6 +1530,7 @@ function renderStats(){
     +'<div style="text-align:center;margin-top:8px;font-size:12px;color:#767676;font-weight:700">Aylık gelişim grafikleri ve aylık özet tüm ayları gösterir · Net = Doğru − Yanlış÷3</div>';
 
   // Draw charts after DOM update
+  setTimeout(drawDenemeChart,60);
   if(gt>0) setTimeout(function(){ drawCharts(sat, activeMonths); }, 50);
 }
 

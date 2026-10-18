@@ -74,6 +74,14 @@ Rules Playground ile (Simulate) kontrol edin:
 - Giriş yapmadan veri okunamamalı: tarayıcıda `https://soru-takip-uygulamasi-default-rtdb.firebaseio.com/records/omer.json` açıldığında `Permission denied` görülmeli.
 - Dört hesapla uygulamayı tekrar deneyin (3. adımdaki liste).
 
+## Kural güncellemeleri
+
+Yeni özellikler yeni veri yolları ekler. Kurallar eskiyse ilgili özellik "izin yok" hatası verir, diğer ekranlar etkilenmez.
+
+- **Genel Deneme ders bazlı sonuç (`denemeler/<öğrenci>`):** `database.rules.json` içindeki `denemeler` bölümü gerekir.
+  Konsolda Rules sekmesine dosyanın güncel halini yapıştırıp Publish edin. İstatistik sayfasındaki "Deneme Sonuçları"
+  kartında "okunamadı" yazıyorsa kurallar henüz güncellenmemiştir.
+
 ## Geri dönüş
 
 Sorun çıkarsa Rules sekmesine eski kuralları geri yapıştırıp Publish edin. Site koduna dokunmak gerekmez.

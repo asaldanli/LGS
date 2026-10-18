@@ -14,14 +14,17 @@ function load(nowIso) {
     constructor(...a) { if (a.length === 0) super(nowIso); else super(...a); }
     static now() { return new RD(nowIso).getTime(); }
   }
+  const handlers = {};
+  const el = () => ({ textContent: "", style: {}, classList: { add() {}, remove() {} }, addEventListener() {} });
   const sb = {
-    window: { addEventListener() {}, location: { search: "" } },
-    document: { addEventListener() {}, getElementById() { return null; } },
-    URLSearchParams, console, Chart: function () {}, Date: FakeDate,
+    window: { addEventListener(e, f) { handlers["w:" + e] = f; }, location: { search: "" } },
+    document: { visibilityState: "visible", addEventListener(e, f) { handlers["d:" + e] = f; }, getElementById() { return el(); } },
+    URLSearchParams, console, Chart: function () {}, Date: FakeDate, setTimeout, clearTimeout,
     localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
   };
   vm.createContext(sb);
   vm.runInContext(SRC, sb);
+  sb.__handlers = handlers;
   return sb;
 }
 
@@ -94,4 +97,58 @@ test("kutlama: aynı değer bir kez, değer değişince yeniden, rekor altında 
   assert.ok(step(100) > 0);
 });
 
+test("deneme: tam doğru 270 ağırlıklı net ve 500 puan, sıfır 100 puan", () => {
+  const full = {};
+  app.LGS_DERSLER.forEach((s) => { full[s.id] = { c: s.q, w: 0 }; });
+  const r = app.denemeSonuc(full);
+  assert.strictEqual(r.maxWeighted, 270);
+  assert.strictEqual(r.weighted, 270);
+  assert.strictEqual(r.total, 90);
+  assert.strictEqual(r.puan, 500);
+  const zero = app.denemeSonuc({});
+  assert.strictEqual(zero.weighted, 0);
+  assert.strictEqual(zero.puan, 100);
+});
+
+test("deneme: karışık sonuç ders neti, ağırlıklı net ve yaklaşık puan", () => {
+  const d = {
+    turkce: { c: 18, w: 2 }, matematik: { c: 15, w: 3 }, fen: { c: 10, w: 6 },
+    sosyal: { c: 8, w: 1 }, din: { c: 9, w: 0 }, ingilizce: { c: 7, w: 3 },
+  };
+  const r = app.denemeSonuc(d);
+  assert.strictEqual(app.fnet(r.nets.turkce), 17.33);
+  assert.strictEqual(app.fnet(r.total), 62);
+  assert.strictEqual(app.fnet(r.weighted), 180);
+  assert.strictEqual(r.puan, 367);
+  // çok düşük net 100'ün altına inmez
+  assert.strictEqual(app.denemeSonuc({ turkce: { c: 0, w: 20 } }).puan, 100);
+});
+
+test("hedefler: kayıtlı ay kendi hedefini, boş ay önceki aydan taşınanı kullanır", () => {
+  app.goals = { "2026-09": { matematik: { targetTotal: 500 } } };
+  assert.strictEqual(app.effectiveGoals("2026-09").matematik.targetTotal, 500);
+  assert.strictEqual(app.effectiveGoals("2026-10").matematik.targetTotal, 500);
+  assert.strictEqual(app.effectiveGoals("2026-05"), null);
+  app.goals = {};
+});
+
+test("kayıt: sekme kapanırken bekleyen değer hemen yazılır, çift yazım olmaz", () => {
+  const a = load("2026-10-18T12:00:00+03:00");
+  const writes = [];
+  const mkRef = () => ({ child() { return mkRef(); }, set(d) { writes.push(JSON.stringify(d)); return Promise.resolve(); } });
+  a.curStudent = "omer"; a.selDate = "2026-10-18"; a.recs = {}; a.recRef = mkRef();
+  a.saveField("matematik", "total", 55);
+  assert.strictEqual(writes.length, 0);
+  a.__handlers["w:pagehide"]();
+  assert.strictEqual(writes.length, 1);
+  assert.strictEqual(writes[0], '{"total":55,"correct":0}');
+  // gün değişse de aynı dersin önceki günkü bekleyen kaydı iptal olmaz
+  a.saveField("matematik", "total", 10);
+  a.selDate = "2026-10-19";
+  a.saveField("matematik", "total", 20);
+  a.__handlers["w:pagehide"]();
+  assert.strictEqual(writes.length, 3);
+});
+
 console.log("\n" + passed + " test geçti");
+process.exit(0);   // bekleyen zamanlayıcılar süreci açık tutmasın

@@ -56,6 +56,44 @@
         }
       }
     },
+    "denemeler": {
+      "omer": {
+        ".read": "auth != null && (auth.token.email === 'omer@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr' || auth.token.email === 'teacher@lgs.local')",
+        ".write": "auth != null && (auth.token.email === 'omer@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr')",
+        "$id": {
+          ".validate": "newData.hasChildren(['date', 'd'])",
+          "date": { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)" },
+          "name": { ".validate": "newData.isString() && newData.val().length <= 60" },
+          "d": {
+            "$subj": {
+              ".validate": "$subj.matches(/^(turkce|matematik|fen|sosyal|din|ingilizce)$/) && newData.hasChildren(['c', 'w'])",
+              "c": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20" },
+              "w": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20" },
+              "$other": { ".validate": false }
+            }
+          },
+          "$other": { ".validate": false }
+        }
+      },
+      "zeynep": {
+        ".read": "auth != null && (auth.token.email === 'zeynep@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr' || auth.token.email === 'teacher@lgs.local')",
+        ".write": "auth != null && (auth.token.email === 'zeynep@lgs.local' || auth.token.email === 'saldanli@istanbul.edu.tr')",
+        "$id": {
+          ".validate": "newData.hasChildren(['date', 'd'])",
+          "date": { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)" },
+          "name": { ".validate": "newData.isString() && newData.val().length <= 60" },
+          "d": {
+            "$subj": {
+              ".validate": "$subj.matches(/^(turkce|matematik|fen|sosyal|din|ingilizce)$/) && newData.hasChildren(['c', 'w'])",
+              "c": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20" },
+              "w": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20" },
+              "$other": { ".validate": false }
+            }
+          },
+          "$other": { ".validate": false }
+        }
+      }
+    },
     "profiles": {
       "omer": {
         "avatar": {
