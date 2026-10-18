@@ -129,6 +129,39 @@ test("hedefler: kayıtlı ay kendi hedefini, boş ay önceki aydan taşınanı k
   app.goals = {};
 });
 
+test("hedefler: ders bazlı doğruluk hedefi, yoksa eski genel hedefe düşer", () => {
+  const g = { matematik: { targetTotal: 500, targetAccuracy: 95 }, __acc: 90 };
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(app.goalFor(g, "matematik"))), { t: 500, a: 95 });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(app.goalFor(g, "fen"))), { t: 0, a: 90 });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(app.goalFor(null, "fen"))), { t: 0, a: 0 });
+});
+
+test("hedefler: kaydedilmemiş ay önceki aydan devam eder, kayıtlı ay kendini kullanır", () => {
+  const src = { "2026-09": { matematik: { targetTotal: 500 } }, "2026-11": { matematik: { targetTotal: 600 } } };
+  assert.strictEqual(app.goalSourceMonth("2026-10", src), "2026-09");
+  assert.strictEqual(app.goalSourceMonth("2026-11", src), "2026-11");
+  assert.strictEqual(app.goalSourceMonth("2026-12", src), "2026-11");
+  assert.strictEqual(app.goalSourceMonth("2026-05", src), null);
+  assert.strictEqual(app.effectiveGoals("2026-12", src).matematik.targetTotal, 600);
+});
+
+test("yönetici hedef kaydı: değerler sınırlanır, yalnızca seçili öğrenci ve ay yoluna yazılır", () => {
+  const a = load("2026-10-18T12:00:00+03:00");
+  const writes = [];
+  a.db = { ref(path) { return { set(v) { writes.push([path, JSON.parse(JSON.stringify(v))]); return Promise.resolve(); } }; } };
+  a.goalsBy = { omer: {}, zeynep: {} };
+  a.admGoalStudent = "zeynep"; a.admGoalMonth = "2026-10"; a.admGoalDraft = {};
+  a.admGoalSet("matematik", "targetTotal", "600");
+  a.admGoalSet("matematik", "targetAccuracy", "150");   // 100'e sınırlanır
+  a.admGoalSet("fen", "targetTotal", "-5");              // 0'a sınırlanır
+  a.admGoalSave();
+  assert.strictEqual(writes.length, 1);
+  assert.strictEqual(writes[0][0], "goals/zeynep/2026-10");
+  assert.deepStrictEqual(writes[0][1].matematik, { targetTotal: 600, targetAccuracy: 100 });
+  assert.deepStrictEqual(writes[0][1].fen, { targetTotal: 0, targetAccuracy: 0 });
+  assert.strictEqual(Object.keys(writes[0][1]).length, 7);
+});
+
 test("kayıt: sekme kapanırken bekleyen değer hemen yazılır, çift yazım olmaz", () => {
   const a = load("2026-10-18T12:00:00+03:00");
   const writes = [];

@@ -254,7 +254,8 @@ function showPicker(){
   if(recRef&&recListener) recRef.off("value",recListener);
   if(goalRef&&goalListener) goalRef.off("value",goalListener);
   if(denemeRef&&denemeListener) denemeRef.off("value",denemeListener);
-  recs={}; goals={}; cmpRecs={}; denemeler={}; closeDenemeForm();
+  if(goalRefZ&&goalListenerZ) goalRefZ.off("value",goalListenerZ);
+  recs={}; goals={}; goalsBy={omer:{},zeynep:{}}; cmpRecs={}; denemeler={}; closeDenemeForm();
   var wasTeacher=_teacherMode;
   curStudent=null; _teacherMode=false;
   if(!wasTeacher){
@@ -270,8 +271,8 @@ function showPicker(){
 
 // Önceki oturumdan kalan görünüm ve durumları sıfırlar (öğrenci/yönetici/öğretmen geçişinde)
 function resetSessionUI(){
-  var student=["daily","weekly","monthly","goals","stats"];
-  var admin=["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats"];
+  var student=["daily","weekly","monthly","stats"];
+  var admin=["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats","cmp-goals"];
   student.forEach(function(t){ var el=document.getElementById("nb-"+t); if(el){ el.style.display=""; el.className=t==="daily"?"act":""; } });
   admin.forEach(function(t){ var el=document.getElementById("nb-"+t); if(el){ el.style.display="none"; el.className=""; } });
   var pill=document.getElementById("ro-pill");
@@ -281,6 +282,7 @@ function resetSessionUI(){
   if(av){ av.style.backgroundImage="none"; av.textContent=""; av.style.cursor="pointer"; av.onclick=openAvatarModal; }
   Object.keys(_charts).forEach(function(k){ destroyChart(k); });
   statsSelMonths=[]; statsInit=false; admSelMonths=[]; admInit=false; admStudent='omer'; expSubj=null; curView="daily";
+  admGoalStudent="omer"; admGoalMonth=null; admGoalDraft=null; admGoalMsg="";
   document.getElementById("vw").innerHTML="";
 }
 
@@ -294,7 +296,8 @@ function pickStudent(sid){
     if(recRef&&recListener)recRef.off("value",recListener);
     if(goalRef&&goalListener)goalRef.off("value",goalListener);
     if(denemeRef&&denemeListener) denemeRef.off("value",denemeListener);
-    recs={}; goals={}; cmpRecs={}; denemeler={};
+    if(goalRefZ&&goalListenerZ) goalRefZ.off("value",goalListenerZ);
+    recs={}; goals={}; goalsBy={omer:{},zeynep:{}}; cmpRecs={}; denemeler={};
     resetSessionUI();
     selDate=today(); selMonth=ymNow(); selWeekStart=weekStart(today());
     expSubj=null;
@@ -308,23 +311,32 @@ function pickStudent(sid){
       document.getElementById("hdr-sub").textContent="👑";
       document.getElementById("hdr-name").textContent="Yönetici Paneli";
       document.getElementById("ro-pill").style.display="inline-flex";
-      ["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats"].forEach(function(t){
+      ["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats","cmp-goals"].forEach(function(t){
         var el=document.getElementById("nb-"+t); if(el) el.style.display="flex";
       });
-      ["daily","weekly","monthly","goals","stats"].forEach(function(t){
+      ["daily","weekly","monthly","stats"].forEach(function(t){
         var el=document.getElementById("nb-"+t); if(el) el.style.display="none";
       });
       recRef=db.ref("records/omer");
       goalRef=db.ref("goals/omer");
       syncState("saving");
+      var adminFirstLoad=true;
       recListener=recRef.on("value",function(snap){
         recs=snap.val()||{};
         db.ref("records/zeynep").once("value",function(s2){
           cmpRecs=s2.val()||{}; updateHdr(); syncState("ok");
-          gv("cmp-daily");
+          // İlk yüklemede günlük karşılaştırma açılır; sonraki veri değişikliklerinde açık ekran yenilenir
+          if(adminFirstLoad){ adminFirstLoad=false; gv("cmp-daily"); } else render();
         });
       },function(){ syncState("error"); });
-      goalListener=goalRef.on("value",function(snap){ goals=snap.val()||{}; });
+      // Yönetici her iki öğrencinin hedeflerini görür ve düzenler
+      goalListener=goalRef.on("value",function(snap){
+        goals=snap.val()||{}; goalsBy.omer=goals; if(curView==="cmp-goals") renderCmpGoals();
+      });
+      goalRefZ=db.ref("goals/zeynep");
+      goalListenerZ=goalRefZ.on("value",function(snap){
+        goalsBy.zeynep=snap.val()||{}; if(curView==="cmp-goals") renderCmpGoals();
+      });
       return;
     }
 
@@ -566,27 +578,6 @@ function adj(sid,field,delta){
   saveField(sid,field,inp.value);
 }
 
-function saveGoals(){
-  if(READONLY){alert("Görüntüleme modunda kayıt yapılamaz.");return;}
-  syncState("saving");
-  goalRef.child(selMonth).set(goals[selMonth]||{})
-    .then(function(){syncState("ok");showGoalOk();}).catch(function(){syncState("error");});
-}
-function showGoalOk(){
-  var btn=document.getElementById("goal-btn");
-  if(!btn)return;
-  btn.textContent="✅ Kaydedildi!";
-  btn.style.background="linear-gradient(135deg,#22c55e,#16a34a)";
-  setTimeout(function(){btn.textContent="🎯 Hedefleri Kaydet";btn.style.background="linear-gradient(135deg,var(--p),var(--v))";},2000);
-}
-
-// ── Önceki ayın hedeflerini bu aya aktar ──────────────────────────
-function getPrevMonth(ymStr){
-  var p=parseYM(ymStr), m=p.m-1, y=p.y;
-  if(m<0){m=11;y--;}
-  return y+"-"+pad(m+1);
-}
-
 // Hedef ekranında gezilebilen aylar: başlangıçtan LGS ayına kadar (gelecek aylara da hedef girilebilir)
 function goalMonths(){
   var res=availMonths(), end=LGS_DATE.slice(0,7);
@@ -594,58 +585,17 @@ function goalMonths(){
   while(ym(y,m)<end){ if(++m>11){m=0;y++;} res.push(ym(y,m)); }
   return res;
 }
-function gPrev(){var ms=goalMonths(),i=ms.indexOf(selMonth);if(i>0){selMonth=ms[i-1];renderGoals();}}
-function gNext(){var ms=goalMonths(),i=ms.indexOf(selMonth);if(i<ms.length-1){selMonth=ms[i+1];renderGoals();}}
-
-function carryGoalsIfEmpty(){
-  // If current month has no goals set, copy from the most recent month that has goals
-  if(goals[selMonth] && Object.keys(goals[selMonth]).length>0) return; // already has goals
-  var months=goalMonths();
-  var curIdx=months.indexOf(selMonth);
-  for(var i=curIdx-1;i>=0;i--){
-    var prevM=months[i];
-    if(goals[prevM] && Object.keys(goals[prevM]).length>0){
-      // Deep copy
-      goals[selMonth]=JSON.parse(JSON.stringify(goals[prevM]));
-      break;
-    }
-  }
-}
-function setGoalField(sid,field,val){
-  if(!goals[selMonth])goals[selMonth]={};
-  if(sid==="__acc"){
-    goals[selMonth]["__acc"]=Math.min(100,Math.max(0,parseInt(val)||0));
-    return;
-  }
-  val=Math.max(0,parseInt(val)||0);
-  if(!goals[selMonth][sid])goals[selMonth][sid]={targetTotal:0};
-  goals[selMonth][sid][field]=val;
-}
-function adjGoal(sid,field,delta){
-  if(sid==="__acc"){
-    var cur=(goals[selMonth]&&goals[selMonth]["__acc"])||0;
-    setGoalField("__acc","",Math.min(100,Math.max(0,cur+delta)));
-    renderGoals(); return;
-  }
-  var g=(goals[selMonth]&&goals[selMonth][sid])||{targetTotal:0};
-  var v=Math.max(0,(g[field]||0)+delta);
-  setGoalField(sid,field,v); renderGoals();
-}
-
 // ═══════════════════════════════════════════════════════════════════
 //  NAVIGATION
 // ═══════════════════════════════════════════════════════════════════
 function gv(v){
-  if(READONLY&&v==="goals") return;
-  // Hedef ekranında gelecek aya geçilmiş olabilir; diğer ekranlar bugünün ayına döner
-  if(v!=="goals"&&selMonth>ymNow()) selMonth=ymNow();
   curView=v; expSubj=null;
-  ["daily","weekly","monthly","goals","stats","cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats"].forEach(function(x){
+  ["daily","weekly","monthly","stats","cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats","cmp-goals"].forEach(function(x){
     var el=document.getElementById("nb-"+x); if(el) el.className=x===v?"act":"";
   });
   render();
 }
-function render(){ if(!db||!curStudent)return; var fn={daily:renderDaily,weekly:renderWeekly,monthly:renderMonthly,goals:renderGoals,stats:renderStats,"cmp-daily":renderCmpDaily,"cmp-weekly":renderCmpWeekly,"cmp-monthly":renderCmpMonthly,"cmp-all":renderCmpAll,"cmp-subj":renderCmpSubj,"cmp-stats":renderCmpStats}; (fn[curView]||renderDaily)(); updateHdr(); }
+function render(){ if(!db||!curStudent)return; var fn={daily:renderDaily,weekly:renderWeekly,monthly:renderMonthly,stats:renderStats,"cmp-daily":renderCmpDaily,"cmp-weekly":renderCmpWeekly,"cmp-monthly":renderCmpMonthly,"cmp-all":renderCmpAll,"cmp-subj":renderCmpSubj,"cmp-stats":renderCmpStats,"cmp-goals":renderCmpGoals}; (fn[curView]||renderDaily)(); updateHdr(); }
 
 function updateHdr(){
   var s=dstats(selDate);
@@ -724,7 +674,6 @@ function renderDaily(){
   document.getElementById("vw").innerHTML=
     (curStudent==="omer"?lgsWidget():"")
     +streakWidget()
-    +goalRemainingCard()
     +'<div class="period-nav">'
     +'<button aria-label="Önceki" onclick="calPrev()">‹</button>'
     +'<span>'+MONTHS[p.m]+' '+p.y+'</span>'
@@ -737,7 +686,8 @@ function renderDaily(){
     +'</div>'
     +scards
     +'<div style="text-align:center;font-size:12px;color:#767676;font-weight:700;margin-top:8px">✅ Otomatik kaydediliyor · Net = Doğru − Yanlış÷3</div>'
-    +'<div class="card"><div class="card-ttl" style="font-size:14px;margin-bottom:6px">📊 Son 14 Gün — Toplam Soru</div><div style="position:relative;height:170px"><canvas id="std-daily-bar" role="img" aria-label="Son 14 gün toplam soru grafiği"></canvas></div></div>';
+    +'<div class="card"><div class="card-ttl" style="font-size:14px;margin-bottom:6px">📊 Son 14 Gün — Toplam Soru</div><div style="position:relative;height:170px"><canvas id="std-daily-bar" role="img" aria-label="Son 14 gün toplam soru grafiği"></canvas></div></div>'
+    +goalRemainingCard();   // aylık hedef durumu en altta, ders başına pasta grafik
   setTimeout(function(){ drawStdDailyBar(); },50);
 }
 
@@ -832,7 +782,6 @@ function renderWeekly(){
     +sb("✓"+ws.correct,"Doğru","#f0fdf4","#22c55e")
     +sb(fnet(ws.net),"Net","#F0FDF4","#16a34a")
     +'</div>'
-    +weekGoalCard(ws.total)
     +dayCards+table+dayDetail
     +'<div class="card" style="margin-top:4px">'
     +'<div class="card-ttl">📊 Son 12 Hafta — Toplam Soru</div>'
@@ -844,11 +793,6 @@ function renderWeekly(){
 }
 
 
-function adjWeekGoal(delta){
-  var cur=getWeeklyGoal();
-  saveWeeklyGoal(Math.max(0,cur+delta));
-  renderWeekly();
-}
 function drawWeekBarChart(){
   var el=document.getElementById('weekBarChart'); if(!el)return;
   destroyChart('weekBar');
@@ -926,7 +870,7 @@ function renderMonthly(){
 
   SUBJ.forEach(function(s){
     var ss=mstats(selMonth,s.id);
-    var g=(goals[selMonth]&&goals[selMonth][s.id])||{targetTotal:0,targetAccuracy:0};
+    var gf=goalFor(effectiveGoals(selMonth),s.id), g={targetTotal:gf.t,targetAccuracy:gf.a};
     var ap=ss.total>0?parseFloat((ss.correct/ss.total*100).toFixed(2)):0;
     var tp=g.targetTotal>0?Math.min(100,Math.round((ss.total/g.targetTotal)*100)):null;
     html+='<div class="card" style="border:2px solid '+(ss.total>0?s.c+'44':"#f3f4f6")+'">'
@@ -943,7 +887,7 @@ function renderMonthly(){
       +'</div>'+(ss.total>0?ring(ap,s.c,46):"")+'</div>';
     if(ss.total>0){
       if(tp!==null)html+='<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#666;margin-bottom:4px"><span>📋 '+ss.total+' / '+g.targetTotal+' soru</span><span style="color:'+(tp>=100?"#15803d":s.c)+'">%'+tp+'</span></div><div class="pbr"><div class="pfill" style="width:'+tp+'%;background:'+(tp>=100?"#22c55e":s.c)+'"></div></div></div>';
-      var gAcc=(goals[selMonth]&&goals[selMonth]["__acc"])||0; if(gAcc>0){var ad=parseFloat((ap-gAcc).toFixed(2)); html+='<div><div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:4px"><span style="color:#666">🎯 Doğruluk Hedefi %'+gAcc+'</span><span style="color:'+(ad>=0?"#15803d":"#dc2626")+'">'+(ad>=0?"+":"")+ad+' '+(ad>=0?"✓":"✗")+'</span></div><div class="pbr"><div class="pfill" style="width:'+Math.min(100,ap)+'%;background:'+(ap>=gAcc?"#22c55e":"var(--a)")+'"></div><div class="pmark" style="left:'+Math.min(100,gAcc)+'%"></div></div></div>';}
+      var gAcc=g.targetAccuracy||0; if(gAcc>0){var ad=parseFloat((ap-gAcc).toFixed(2)); html+='<div><div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:4px"><span style="color:#666">🎯 Doğruluk Hedefi %'+gAcc+'</span><span style="color:'+(ad>=0?"#15803d":"#dc2626")+'">'+(ad>=0?"+":"")+ad+' '+(ad>=0?"✓":"✗")+'</span></div><div class="pbr"><div class="pfill" style="width:'+Math.min(100,ap)+'%;background:'+(ap>=gAcc?"#22c55e":"var(--a)")+'"></div><div class="pmark" style="left:'+Math.min(100,gAcc)+'%"></div></div></div>';}
     }
     html+='</div>';
   });
@@ -955,61 +899,6 @@ function renderMonthly(){
 }
 function mPrev(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i>0){selMonth=ms[i-1];renderMonthly();}}
 function mNext(){var ms=availMonths(),i=ms.indexOf(selMonth);if(i<ms.length-1){selMonth=ms[i+1];renderMonthly();}}
-
-// ═══════════════════════════════════════════════════════════════════
-//  GOALS VIEW
-// ═══════════════════════════════════════════════════════════════════
-function renderGoals(){
-  carryGoalsIfEmpty();
-  var p=parseYM(selMonth);
-  var globalAcc=(goals[selMonth]&&goals[selMonth]["__acc"])||0;
-  var totalMs=mstats(selMonth);
-  var overallAp=totalMs.total>0?parseFloat((totalMs.correct/totalMs.total*100).toFixed(2)):0;
-  var html='<div class="period-nav"><button aria-label="Önceki" onclick="gPrev()">‹</button><span>🎯 '+MONTHS[p.m]+' '+p.y+'</span><button aria-label="Sonraki" onclick="gNext()">›</button></div>'
-    +'<div class="tip">💡 Hedefler bir önceki aydan otomatik aktarılır. İstediğiniz zaman değiştirebilirsiniz.</div>'
-    +'<div class="card" style="border:2px solid #22c55e55;margin-bottom:10px">'
-    +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'
-    +'<div style="width:42px;height:42px;border-radius:13px;background:#f0fdf4;display:flex;align-items:center;justify-content:center;font-size:22px">🎯</div>'
-    +'<div><div style="font-weight:900;font-size:15px;color:#222">Genel Doğruluk Hedefi</div>'
-    +'<div style="font-size:12px;color:#767676;font-weight:600">Tüm dersler ortalaması — Bu ay şu an: %'+overallAp+'</div></div></div>'
-    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(globalAcc>0&&totalMs.total>0?10:0)+'px">'
-    +'<button style="width:28px;height:28px;border-radius:8px;border:none;background:#dcfce7;color:#15803d;font-size:15px;font-weight:900;cursor:pointer" aria-label="Doğruluk hedefini azalt" onclick="adjGoal(\'__acc\',\'\',-5)">−</button>'
-    +'<input type="number" aria-label="Genel doğruluk hedefi yüzde" min="0" max="100" value="'+globalAcc+'" style="width:64px;text-align:center;border-radius:10px;border:2px solid #22c55e;font-size:17px;font-weight:900;color:#15803d;padding:5px 0;outline:none;font-family:Nunito,sans-serif" oninput="setGoalField(\'__acc\',\'\',parseInt(this.value)||0)">'
-    +'<button style="width:28px;height:28px;border-radius:8px;border:none;background:#22c55e;color:white;font-size:15px;font-weight:900;cursor:pointer" aria-label="Doğruluk hedefini artır" onclick="adjGoal(\'__acc\',\'\',5)">+</button>'
-    +'<span style="font-size:14px;font-weight:700;color:#15803d">% doğru hedefi</span></div>'
-    +(globalAcc>0&&totalMs.total>0
-      ?'<div><div class="pbr"><div class="pfill" style="width:'+Math.min(100,overallAp)+'%;background:'+(overallAp>=globalAcc?'#22c55e':'var(--a)')+'"></div><div class="pmark" style="left:'+Math.min(100,globalAcc)+'%"></div></div>'
-        +'<div style="font-size:12px;font-weight:700;color:'+(overallAp>=globalAcc?'#22c55e':'var(--a)')+';margin-top:4px">'
-        +(overallAp>=globalAcc?'✅ Hedefe ulaşıldı! (%'+overallAp+')'
-          :'Şu an %'+overallAp+' · Hedefe '+Math.max(0,globalAcc-overallAp)+' puan kaldı')
-        +'</div></div>'
-      :"")
-    +'</div>';
-  SUBJ.forEach(function(s){
-    var g=(goals[selMonth]&&goals[selMonth][s.id])||{targetTotal:0};
-    var ms=mstats(selMonth,s.id);
-    var tp=g.targetTotal>0?Math.min(100,parseFloat((ms.total/g.targetTotal*100).toFixed(2))):0;
-    html+='<div class="card" style="border:2px solid '+s.c+'22">'
-      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
-      +'<div class="sicon" style="background:'+s.li+';width:38px;height:38px;border-radius:12px">'+s.e+'</div>'
-      +'<div style="flex:1"><div style="font-weight:900;font-size:14px;color:#222">'+s.n+'</div>'
-      +'<div style="font-size:12px;color:#767676;font-weight:600">Bu ay: '+ms.total+' soru · Net: '+fnet(ms.net)+'</div></div></div>'
-      +'<div style="background:'+s.bg+';border-radius:12px;padding:10px 12px">'
-      +'<div style="font-size:12px;font-weight:800;color:'+s.d+';letter-spacing:.5px;margin-bottom:6px">📋 HEDEF SORU</div>'
-      +'<div style="display:flex;align-items:center;gap:6px">'
-      +'<button style="width:28px;height:28px;border-radius:8px;border:none;background:#e5e7eb;color:#666;font-size:15px;font-weight:900;cursor:pointer" aria-label="Hedef soru sayısını azalt" onclick="adjGoal(\''+s.id+'\',\'targetTotal\',-10)">−</button>'
-      +'<input type="number" aria-label="'+s.n+' hedef soru sayısı" min="0" value="'+g.targetTotal+'" style="width:64px;text-align:center;border-radius:10px;border:2px solid '+s.c+';font-size:17px;font-weight:900;color:'+s.d+';padding:5px 0;outline:none;font-family:Nunito,sans-serif" oninput="setGoalField(\''+s.id+'\',\'targetTotal\',parseInt(this.value)||0)">'
-      +'<button style="width:28px;height:28px;border-radius:8px;border:none;background:'+s.c+';color:white;font-size:15px;font-weight:900;cursor:pointer" aria-label="Hedef soru sayısını artır" onclick="adjGoal(\''+s.id+'\',\'targetTotal\',10)">+</button>'
-      +'<span style="font-size:13px;font-weight:700;color:'+s.d+';margin-left:2px">soru</span>'
-      +(g.targetTotal>0&&ms.total>0?'<span style="font-size:12px;font-weight:700;color:'+(tp>=100?'#22c55e':s.c)+';margin-left:6px">'+ms.total+'/'+g.targetTotal+' (%'+tp+')</span>':"")
-      +'</div>'
-      +(g.targetTotal>0&&ms.total>0?'<div style="margin-top:8px"><div class="pbr"><div class="pfill" style="width:'+tp+'%;background:'+(tp>=100?'#22c55e':s.c)+'"></div></div></div>':"")
-      +'</div></div>';
-  });
-  if(!READONLY) html+='<button id="goal-btn" onclick="saveGoals()" style="width:100%;padding:15px;border-radius:16px;border:none;background:linear-gradient(135deg,var(--p),var(--v));color:white;font-size:16px;font-weight:900;box-shadow:0 4px 20px #4F46E555;font-family:Nunito,sans-serif">🎯 Hedefleri Kaydet</button>';
-  else html+='<div style="text-align:center;padding:12px;background:#FEF3C7;border-radius:12px;font-size:13px;font-weight:800;color:#92400E">👁️ Görüntüleme modunda hedef değiştirilemez</div>';
-  document.getElementById("vw").innerHTML=html;
-}
 
 // ═══════════════════════════════════════════════════════════════════
 //  İSTATİSTİK: AY SEÇİMİ İLE DERS BAZINDA DOĞRU / YANLIŞ
@@ -1592,10 +1481,11 @@ function drawMonthlyRadarChart(selMonth){
   destroyChart('monthRadar');
   var subjData=SUBJ.filter(function(s){return s.id!=='deneme';});
   var labels=subjData.map(function(s){return s.n;});
-  var g_acc=(goals[selMonth]&&goals[selMonth]['__acc'])||0;
+  var eg=effectiveGoals(selMonth)||{};
+  var g_acc=eg.__acc||0;
   // Hedef gerçekleşme: soru hedefi için tamamlanma yüzdesi, doğruluk için gerçekleşme
   var goalVals=subjData.map(function(s){
-    var g=(goals[selMonth]&&goals[selMonth][s.id])||{targetTotal:0};
+    var g=eg[s.id]||{targetTotal:0};
     var ss=mstats(selMonth,s.id);
     if(!g.targetTotal) return 0;
     return Math.min(100,parseFloat((ss.total/g.targetTotal*100).toFixed(2)));
@@ -1605,7 +1495,7 @@ function drawMonthlyRadarChart(selMonth){
     return ss.total>0?parseFloat((ss.correct/ss.total*100).toFixed(2)):0;
   });
   var hasGoals=subjData.some(function(s){
-    return (goals[selMonth]&&goals[selMonth][s.id]&&goals[selMonth][s.id].targetTotal>0);
+    return (eg[s.id]&&eg[s.id].targetTotal>0);
   });
   var colors=subjData.map(function(s){return s.c;});
   var datasets=[
@@ -1872,7 +1762,7 @@ function exportMonthPDF(){
   y+=4;
 
   // Goals progress
-  var monthGoals=goals[selMonth]||{};
+  var monthGoals=effectiveGoals(selMonth)||{};
   var hasGoals=Object.keys(monthGoals).some(function(k){return monthGoals[k].targetTotal||monthGoals[k].targetAccuracy;});
   if(hasGoals){
     y=pdfSection(doc,y,"Hedef Karşılaştırma",16,163,74);
@@ -1898,7 +1788,7 @@ function exportMonthPDF(){
     var prevSN=prevMs?null:null;
     if(prevM){var pss=mstats(prevM,s.id); prevSN=pss.total?pss.net:null;}
     var g=monthGoals[s.id]||{};
-    var gA2=(goals[selMonth]&&goals[selMonth]['__acc'])||0; y=pdfSubjRow(doc,y,s,ss.total,ss.correct,ss.wrong,ss.net,pct,prevSN,g.targetTotal||0,gA2);
+    var gA2=goalFor(monthGoals,s.id).a; y=pdfSubjRow(doc,y,s,ss.total,ss.correct,ss.wrong,ss.net,pct,prevSN,g.targetTotal||0,gA2);
   });
 
   // Haftalik dagilim
@@ -2374,89 +2264,154 @@ function calcLongestStreak(){
   return max;
 }
 
-// Weekly goal stored under goals[selMonth]["__weeklyTotal"]
-function getWeeklyGoal(){
-  // Store weekly goal globally, not per month
-  return (goals["__weeklyGoal"])||0;
-}
+// ═══════════════════════════════════════════════════════════════════
+//  HEDEFLER
+//  Hedefler yalnızca yönetici hesabında girilir: goals/<öğrenci>/<ay>/<ders>/{targetTotal, targetAccuracy}.
+//  Bir ay için kayıt yoksa önceki aylardan en yakın kayıtlı hedefler aynen devam eder; öğrenci ekranları da
+//  aynı mantığı kullanır. Öğrenci hesapları hedefleri yalnızca görür.
+// ═══════════════════════════════════════════════════════════════════
+var goalsBy={omer:{},zeynep:{}}, goalRefZ=null, goalListenerZ=null;
+var admGoalStudent="omer", admGoalMonth=null, admGoalDraft=null, admGoalMsg="";
 
-function saveWeeklyGoal(val){
-  if(!curStudent||READONLY||_teacherMode) return;
-  val = Math.max(0, parseInt(val)||0);
-  if(!goals["__weeklyGoal"] || goals["__weeklyGoal"]!==val){
-    goals["__weeklyGoal"] = val;
-    db.ref("goals/"+curStudent+"/__weeklyGoal").set(val);
-  }
-}
-
-// Bir ayın geçerli hedefleri: o ay için kayıtlıysa onlar, değilse önceki aylardan en yakın kayıtlı olan
-// (Hedefler ekranındaki "bir önceki aydan aktar" ile aynı mantık, hedefleri değiştirmez)
-function effectiveGoals(ymStr){
-  if(goals[ymStr]&&Object.keys(goals[ymStr]).length) return goals[ymStr];
+// Hedefin geçerli olduğu kaynak ay: ay için kayıt varsa kendisi, yoksa önceki aylardan en yakın kayıtlı ay, yoksa null
+function goalSourceMonth(ymStr,src){
+  src=src||goals;
+  if(src[ymStr]&&Object.keys(src[ymStr]).length) return ymStr;
   var ms=goalMonths(), i=ms.indexOf(ymStr);
   for(var k=i-1;k>=0;k--){
-    if(goals[ms[k]]&&Object.keys(goals[ms[k]]).length) return goals[ms[k]];
+    if(src[ms[k]]&&Object.keys(src[ms[k]]).length) return ms[k];
   }
   return null;
 }
+function effectiveGoals(ymStr,src){
+  src=src||goals;
+  var m=goalSourceMonth(ymStr,src);
+  return m?src[m]:null;
+}
+// Bir ders için hedef: t = aylık soru hedefi, a = doğruluk hedefi (ders için yoksa eski genel doğruluk hedefi)
+function goalFor(g,sid){
+  var x=(g&&g[sid])||{};
+  return {t:x.targetTotal||0,a:x.targetAccuracy||(g&&g.__acc)||0};
+}
 
-// Günlük ekran: seçili günün ayındaki aylık hedeflere göre kalan soru sayısı
-// Örnek: matematik hedefi 500, ayın ilk günü 50 çözüldüyse kalan 450
+// Günlük ekranın altında: seçili günün ayındaki hedeflere göre ders başına pasta (halka) grafik, en fazla iki satır
+function donutHtml(pct,color,center){
+  return '<div style="width:62px;height:62px;border-radius:50%;background:conic-gradient('+color+' '+(Math.min(100,pct)*3.6)+'deg,#e5e7eb 0);display:flex;align-items:center;justify-content:center;margin:0 auto">'
+    +'<div style="width:42px;height:42px;border-radius:50%;background:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#333">'+center+'</div></div>';
+}
 function goalRemainingCard(){
   var m=selDate.slice(0,7), td=today(), curM=td.slice(0,7);
   if(m>curM) return "";
   var g=effectiveGoals(m); if(!g) return "";
   var p=parseYM(m), daysLeft=(m===curM)?(dim(p.y,p.m)-parseInt(td.slice(8))+1):0;
-  var rows="", any=false;
+  var cells="", any=false;
   SUBJ.forEach(function(s){
-    var target=(g[s.id]&&g[s.id].targetTotal)||0; if(target<=0) return;
+    var gf=goalFor(g,s.id), target=gf.t; if(target<=0) return;
     any=true;
-    var solved=mstats(m,s.id).total, left=Math.max(0,target-solved);
-    var pct=Math.min(100,Math.round(solved/target*100));
-    var note=left===0?'<span style="color:#15803d;font-weight:900">✓ Tamamlandı</span>'
-      :'<span style="font-weight:900;color:'+s.d+'">Kalan '+left+'</span>'
-        +(daysLeft>0?'<span style="color:#666"> · günde ~'+Math.ceil(left/daysLeft)+'</span>':'');
-    rows+='<div style="padding:7px 0;border-bottom:1px solid #f3f4f6">'
-      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:16px">'+s.e+'</span>'
-      +'<span style="flex:1;font-size:13px;font-weight:800;color:#333">'+s.n+'</span>'
-      +'<span style="font-size:12px;font-weight:700">'+note+'</span></div>'
-      +'<div class="pbr"><div class="pfill" style="width:'+pct+'%;background:'+(left===0?"#22c55e":s.c)+'"></div></div>'
-      +'<div style="font-size:12px;color:#666;font-weight:700;margin-top:2px">'+solved+' / '+target+' soru</div></div>';
+    var ss=mstats(m,s.id), solved=ss.total, left=Math.max(0,target-solved);
+    var pct=Math.round(solved/target*100);
+    var acc=ss.total>0?Math.round(ss.correct/ss.total*100):null;
+    var leftTxt=left===0?'<span style="color:#15803d">✓ Tamam</span>'
+      :'<span style="color:'+s.d+'">Kalan '+left+'</span>'+(daysLeft>0?'<div style="font-size:11px;color:#666;font-weight:700">günde ~'+Math.ceil(left/daysLeft)+'</div>':'');
+    var accTxt=(gf.a>0&&acc!==null)?'<div style="font-size:11px;font-weight:800;color:'+(acc>=gf.a?"#15803d":"#b45309")+'">%'+acc+' / hedef %'+gf.a+'</div>'
+      :(gf.a>0?'<div style="font-size:11px;font-weight:700;color:#666">hedef %'+gf.a+'</div>':'');
+    cells+='<div role="img" aria-label="'+s.n+': '+solved+' / '+target+' soru, kalan '+left+'" style="text-align:center;min-width:0">'
+      +donutHtml(pct,left===0?"#22c55e":s.c,Math.min(pct,999)+'%')
+      +'<div style="font-size:12px;font-weight:800;color:#333;margin-top:4px">'+s.e+' '+s.n+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:#666">'+solved+' / '+target+'</div>'
+      +'<div style="font-size:12px;font-weight:900">'+leftTxt+'</div>'+accTxt+'</div>';
   });
   if(!any) return "";
-  return '<div class="card" style="padding:12px 14px"><div style="font-size:14px;font-weight:900;color:#333;margin-bottom:2px">🎯 Aylık hedef durumu <span style="font-size:12px;color:#666;font-weight:700">· '+MONTHS[p.m]+' '+p.y+'</span></div>'
-    +(daysLeft>0?'<div style="font-size:12px;color:#666;font-weight:700;margin-bottom:4px">Bugün dahil '+daysLeft+' gün kaldı</div>':'')
-    +rows+'</div>';
+  return '<div class="card" style="padding:12px 10px"><div style="font-size:13px;font-weight:900;color:#333;margin:0 4px 2px">🎯 Aylık hedef durumu <span style="font-size:12px;color:#666;font-weight:700">· '+MONTHS[p.m]+' '+p.y+'</span></div>'
+    +(daysLeft>0?'<div style="font-size:12px;color:#666;font-weight:700;margin:0 4px 8px">Bugün dahil '+daysLeft+' gün kaldı</div>':'<div style="height:8px"></div>')
+    +'<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 4px">'+cells+'</div></div>';
 }
 
-// Aylık hedeflerden önerilen haftalık hedef: toplam aylık hedef / ayın gün sayısı x 7
-function suggestedWeeklyGoal(){
-  var m=ymNow(), g=effectiveGoals(m); if(!g) return 0;
-  var sum=0; SUBJ.forEach(function(s){ sum+=(g[s.id]&&g[s.id].targetTotal)||0; });
-  var p=parseYM(m);
-  return Math.round(sum/dim(p.y,p.m)*7);
+// ── Yönetici hedef ekranı: her öğrenci için ders bazında aylık soru ve doğruluk hedefi ──
+function admGoalSrc(){ return goalsBy[admGoalStudent]||{}; }
+function admGoalInit(){
+  if(!admGoalMonth) admGoalMonth=ymNow();
+  if(!admGoalDraft){
+    // Kayıtlı hedef yoksa önceki aydaki hedefler taslak olarak açılır; kaydedilirse bu aya özel olur
+    var eff=effectiveGoals(admGoalMonth,admGoalSrc());
+    admGoalDraft=eff?JSON.parse(JSON.stringify(eff)):{};
+  }
 }
-function setWeekGoalValue(v){ saveWeeklyGoal(v); renderWeekly(); }
-function applySuggestedWeekGoal(){ saveWeeklyGoal(suggestedWeeklyGoal()); renderWeekly(); }
-
-// Haftalık ekran: haftalık hedef ve seçili haftanın ilerlemesi
-function weekGoalCard(weekTotal){
-  var g=getWeeklyGoal(), edit=!READONLY&&!_teacherMode, sug=suggestedWeeklyGoal();
-  var left=Math.max(0,g-weekTotal), pct=g>0?Math.min(100,Math.round(weekTotal/g*100)):0;
+function admGoalSetStudent(sid){ admGoalStudent=sid; admGoalDraft=null; admGoalMsg=""; renderCmpGoals(); }
+function admGoalMove(delta){
+  var ms=goalMonths(), i=ms.indexOf(admGoalMonth)+delta;
+  if(i<0||i>=ms.length) return;
+  admGoalMonth=ms[i]; admGoalDraft=null; admGoalMsg=""; renderCmpGoals();
+}
+// Taslağa yazar (yazarken ekran yenilenmez)
+function admGoalSet(sid,field,val){
+  var g=admGoalDraft[sid]||(admGoalDraft[sid]={});
+  var v=parseInt(val,10); if(isNaN(v)) v=0;
+  g[field]=field==="targetAccuracy"?Math.min(100,Math.max(0,v)):Math.min(10000,Math.max(0,v));
+  admGoalMsg="";
+}
+function admGoalAdj(sid,field,delta){
+  var cur=(admGoalDraft[sid]&&admGoalDraft[sid][field])||0;
+  admGoalSet(sid,field,cur+delta); renderCmpGoals();
+}
+function admGoalSave(){
+  if(READONLY||!db) return;
+  var sid=admGoalStudent, m=admGoalMonth, out={};
+  SUBJ.forEach(function(s){
+    var g=admGoalDraft[s.id]||{};
+    out[s.id]={targetTotal:g.targetTotal||0,targetAccuracy:g.targetAccuracy||0};
+  });
+  if(admGoalDraft.__acc) out.__acc=admGoalDraft.__acc;   // eski genel doğruluk hedefi varsa korunur
+  syncState("saving");
+  db.ref("goals/"+sid+"/"+m).set(out).then(function(){
+    goalsBy[sid][m]=out; syncState("ok");
+    var p=parseYM(m);
+    admGoalMsg="✅ "+STUDENTS[sid].short+" için "+MONTHS[p.m]+" "+p.y+" hedefleri kaydedildi. Sonraki aylar değiştirilmezse bu hedeflerle devam eder.";
+    renderCmpGoals();
+  }).catch(function(){ syncState("error"); admGoalMsg="❌ Kaydedilemedi."; renderCmpGoals(); });
+}
+function renderCmpGoals(){
+  admGoalInit();
+  var sid=admGoalStudent, m=admGoalMonth, p=parseYM(m), src=admGoalSrc(), st=STUDENTS[sid];
+  var srcM=goalSourceMonth(m,src), srcP=srcM?parseYM(srcM):null;
+  var studentRecs=sid==="omer"?recs:cmpRecs;
   var btn='width:30px;height:30px;border-radius:9px;border:none;font-size:16px;font-weight:900;cursor:pointer';
-  return '<div class="card" style="padding:12px 14px"><div style="font-size:14px;font-weight:900;color:#333;margin-bottom:8px">🎯 Haftalık hedef</div>'
-    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
-    +(edit?'<button aria-label="Haftalık hedefi azalt" style="'+btn+';background:#e5e7eb;color:#555" onclick="adjWeekGoal(-10)">−</button>':'')
-    +(edit?'<input type="number" min="0" aria-label="Haftalık hedef soru sayısı" value="'+g+'" style="width:70px;text-align:center;border-radius:10px;border:2px solid var(--p);font-size:16px;font-weight:900;color:var(--p);padding:5px 0;font-family:Nunito,sans-serif" onchange="setWeekGoalValue(this.value)">'
-      :'<span style="font-size:18px;font-weight:900;color:var(--p)">'+g+'</span>')
-    +(edit?'<button aria-label="Haftalık hedefi artır" style="'+btn+';background:var(--p);color:white" onclick="adjWeekGoal(10)">+</button>':'')
-    +'<span style="font-size:13px;font-weight:700;color:#666">soru / hafta</span></div>'
-    +(g>0?'<div class="pbr" style="margin-top:8px"><div class="pfill" style="width:'+pct+'%;background:'+(left===0?"#22c55e":"var(--p)")+'"></div></div>'
-      +'<div style="font-size:13px;font-weight:800;margin-top:4px;color:'+(left===0?"#15803d":"#333")+'">'+(left===0?'✓ Haftalık hedef tamamlandı':'Bu hafta '+weekTotal+' / '+g+' soru · kalan '+left)+'</div>'
-      :'<div style="font-size:13px;color:#666;font-weight:700;margin-top:8px">Henüz haftalık hedef belirlenmedi.</div>')
-    +(edit&&sug>0&&sug!==g?'<div style="margin-top:8px;font-size:12px;font-weight:700;color:#666">Aylık hedeflerden önerilen: <b>'+sug+'</b> soru/hafta '
-      +'<button style="margin-left:6px;padding:4px 10px;border-radius:8px;border:2px solid var(--p);background:white;color:var(--p);font-size:12px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif" onclick="applySuggestedWeekGoal()">Uygula</button></div>':'')
-    +'</div>';
+  var html=adminHeader("Hedefler","Her öğrenci için ders bazında aylık soru ve doğruluk hedefi")
+    +'<div style="display:flex;gap:6px;margin-bottom:10px">'
+    +["omer","zeynep"].map(function(k){
+      return '<button class="chart-tab'+(k===sid?' act':'')+'" onclick="admGoalSetStudent(\''+k+'\')">'+STUDENTS[k].emoji+' '+STUDENTS[k].short+'</button>';
+    }).join("")+'</div>'
+    +'<div class="period-nav"><button aria-label="Önceki ay" onclick="admGoalMove(-1)">‹</button><span>🎯 '+MONTHS[p.m]+' '+p.y+'</span><button aria-label="Sonraki ay" onclick="admGoalMove(1)">›</button></div>'
+    +'<div class="tip">'+(srcM===m?'Bu ay için kayıtlı hedefler gösteriliyor.'
+      :srcM?'Bu ay için hedef kaydedilmedi: <b>'+MONTHS[srcP.m]+' '+srcP.y+'</b> hedefleri aynen devam ediyor. Değiştirip kaydedersen bu aydan itibaren yeni hedefler geçerli olur.'
+      :'Bu öğrenci için henüz hedef yok. Değerleri girip kaydedin.')+'</div>';
+  SUBJ.forEach(function(s){
+    var g=admGoalDraft[s.id]||{}, ss=mstFrom(studentRecs,m,s.id);
+    var ap=ss.total>0?Math.round(ss.correct/ss.total*100):0;
+    var inp='width:70px;text-align:center;border-radius:10px;border:2px solid '+s.c+';font-size:16px;font-weight:900;color:'+s.d+';padding:5px 0;outline:none;font-family:Nunito,sans-serif';
+    html+='<div class="card" style="border:2px solid '+s.c+'33">'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
+      +'<div class="sicon" style="background:'+s.li+';width:38px;height:38px;border-radius:12px">'+s.e+'</div>'
+      +'<div style="flex:1"><div style="font-weight:900;font-size:14px;color:#222">'+s.n+'</div>'
+      +'<div style="font-size:12px;color:#666;font-weight:600">Bu ay: '+ss.total+' soru'+(ss.total>0?' · %'+ap+' doğruluk':'')+'</div></div></div>'
+      +'<div style="background:'+s.bg+';border-radius:12px;padding:10px 12px">'
+      +'<div style="font-size:12px;font-weight:800;color:'+s.d+';margin-bottom:6px">📋 AYLIK HEDEF SORU</div>'
+      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">'
+      +'<button aria-label="'+s.n+' hedef soruyu azalt" style="'+btn+';background:#e5e7eb;color:#555" onclick="admGoalAdj(\''+s.id+'\',\'targetTotal\',-10)">−</button>'
+      +'<input type="number" min="0" aria-label="'+s.n+' aylık hedef soru sayısı" value="'+(g.targetTotal||0)+'" style="'+inp+'" oninput="admGoalSet(\''+s.id+'\',\'targetTotal\',this.value)">'
+      +'<button aria-label="'+s.n+' hedef soruyu artır" style="'+btn+';background:'+s.c+';color:white" onclick="admGoalAdj(\''+s.id+'\',\'targetTotal\',10)">+</button>'
+      +'<span style="font-size:12px;font-weight:700;color:'+s.d+'">soru</span></div>'
+      +'<div style="font-size:12px;font-weight:800;color:'+s.d+';margin-bottom:6px">🎯 DOĞRULUK HEDEFİ</div>'
+      +'<div style="display:flex;align-items:center;gap:6px">'
+      +'<button aria-label="'+s.n+' doğruluk hedefini azalt" style="'+btn+';background:#e5e7eb;color:#555" onclick="admGoalAdj(\''+s.id+'\',\'targetAccuracy\',-1)">−</button>'
+      +'<input type="number" min="0" max="100" aria-label="'+s.n+' doğruluk hedefi yüzde" value="'+(g.targetAccuracy||0)+'" style="'+inp+'" oninput="admGoalSet(\''+s.id+'\',\'targetAccuracy\',this.value)">'
+      +'<button aria-label="'+s.n+' doğruluk hedefini artır" style="'+btn+';background:'+s.c+';color:white" onclick="admGoalAdj(\''+s.id+'\',\'targetAccuracy\',1)">+</button>'
+      +'<span style="font-size:12px;font-weight:700;color:'+s.d+'">% doğru</span></div>'
+      +'</div></div>';
+  });
+  html+='<button onclick="admGoalSave()" style="width:100%;padding:15px;border-radius:16px;border:none;background:linear-gradient(135deg,var(--p),var(--v));color:white;font-size:16px;font-weight:900;box-shadow:0 4px 20px #4F46E555;font-family:Nunito,sans-serif;cursor:pointer">🎯 '+st.short+' hedeflerini kaydet</button>'
+    +'<div role="status" style="text-align:center;font-size:13px;font-weight:800;margin:10px 4px;color:'+(admGoalMsg.indexOf("❌")===0?"#dc2626":"#15803d")+'">'+admGoalMsg+'</div>';
+  document.getElementById("vw").innerHTML=html;
 }
 
 // Render LGS countdown widget
