@@ -162,6 +162,40 @@ test("yönetici hedef kaydı: değerler sınırlanır, yalnızca seçili öğren
   assert.strictEqual(Object.keys(writes[0][1]).length, 7);
 });
 
+test("istatistik: ay ay seri (seçili ders ve tüm dersler), metrikler ve veri olmayan ay boş", () => {
+  const r = {
+    "2026-09-10": { matematik: S(50, 45), fen: S(30, 24) },
+    "2026-10-05": { matematik: S(40, 40) },
+  };
+  const months = ["2026-08", "2026-09", "2026-10"];
+  const J = (x) => JSON.parse(JSON.stringify(x));
+  assert.deepStrictEqual(J(app.monthlySeries(r, months, "matematik", "acc")), [null, 90, 100]);
+  assert.deepStrictEqual(J(app.monthlySeries(r, months, "matematik", "total")), [null, 50, 40]);
+  assert.deepStrictEqual(J(app.monthlySeries(r, months, "matematik", "wrong")), [null, 10, 0]);
+  assert.deepStrictEqual(J(app.monthlySeries(r, months, null, "total")), [null, 80, 40]);   // tüm dersler
+  assert.deepStrictEqual(J(app.monthlySeries(r, months, "fen", "acc")), [null, 80, null]);
+});
+
+test("istatistik: öğrenci kayıtları oturumdaki öğrenciye göre eşlenir (yönetici ve öğretmen)", () => {
+  const a = load("2026-10-18T12:00:00+03:00");
+  const O = { "2026-10-01": {} }, Z = { "2026-10-02": {} };
+  // yönetici: omer = recs, zeynep = cmpRecs
+  a.curStudent = "omer"; a.recs = O; a.cmpRecs = Z;
+  assert.strictEqual(a.recsOf("omer"), O); assert.strictEqual(a.recsOf("zeynep"), Z);
+  // öğretmen Zeynep'i açmışsa: zeynep = recs, omer = cmpRecs
+  a.curStudent = "zeynep"; a.recs = Z; a.cmpRecs = O;
+  assert.strictEqual(a.recsOf("zeynep"), Z); assert.strictEqual(a.recsOf("omer"), O);
+});
+
+test("deneme: seçili aylara göre süzülür ve yeniden eskiye sıralanır", () => {
+  const src = {
+    a: { date: "2026-09-20", d: {} }, b: { date: "2026-10-03", d: {} }, c: { date: "2026-10-12", d: {} },
+  };
+  const items = app.denemeItems(src, ["2026-10"]);
+  assert.deepStrictEqual(Array.from(items.map((x) => x.id)), ["c", "b"]);
+  assert.strictEqual(app.denemeItems({}, ["2026-10"]).length, 0);
+});
+
 test("kayıt: sekme kapanırken bekleyen değer hemen yazılır, çift yazım olmaz", () => {
   const a = load("2026-10-18T12:00:00+03:00");
   const writes = [];
