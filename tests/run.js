@@ -286,6 +286,13 @@ test("deneme analizi: değişim, soru sayısı farklı denemelerde LGS soru say�
   assert.strictEqual(Math.round(sa.eqTotal), 72);   // 75 soruda 60 net -> LGS 90 soruda 72
 });
 
+test("deneme: soru sayısı girilmemiş ama doğru+yanlış 75 soruluk düzene eşitse ipucu verilir", () => {
+  assert.strictEqual(app.dnLooks75(DK([11, 4], [13, 2], [13, 2], [10, 0], [10, 0], [9, 1])), true);     // 15-15-15-10-10-10
+  assert.strictEqual(app.dnLooks75(DK([11, 4], [13, 2], [13, 2], [10, 0], [10, 0], [8, 1])), false);    // İngilizce 9 (boş soru olabilir)
+  assert.strictEqual(app.dnLooks75(DK([16, 4], [18, 2], [17, 3], [10, 0], [9, 1], [10, 0])), false);    // 90 soruluk
+  assert.strictEqual(app.dnLooks75(null), false);
+});
+
 test("deneme analizi: grafik değeri net ya da ders başarı yüzdesi", () => {
   const s = app.denemeSonuc(DK([18, 3], [10, 0], [0, 0], [0, 0], [0, 0], [0, 0]));
   const tr = app.LGS_DERSLER[0], din = app.LGS_DERSLER[4];

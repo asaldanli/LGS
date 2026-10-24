@@ -1179,10 +1179,16 @@ function updateDenemePreview(){
   var el=document.getElementById("dn-preview"), er=document.getElementById("dn-err"), sm=document.getElementById("dn-qsum");
   if(er) er.textContent=v.err;
   if(sm) sm.textContent="Soru sayıları ("+r.qTotal+")";
+  // ders adlarının yanında güncel soru sayısı ve "Deneme türü" seçiminin işareti
+  LGS_DERSLER.forEach(function(s){ var l=document.getElementById("dn-ql-"+s.id); if(l) l.textContent="("+v.q[s.id]+")"; });
+  var b90=document.getElementById("dn-fmt-90"), b75=document.getElementById("dn-fmt-75");
+  if(b90) b90.className="chart-tab"+(!denemeQFarkli(v.q)?" act":"");
+  if(b75) b75.className="chart-tab"+(LGS_DERSLER.every(function(s){ return v.q[s.id]===DN_Q75[s.id]; })?" act":"");
   if(el) el.innerHTML='<b>Toplam net: '+fnet(r.total)+' / '+r.qTotal+'</b>'
     +'<br><span style="color:var(--p);font-weight:900">≈ '+r.puan+' puan</span> <span style="color:#666">(yaklaşık)</span>';
 }
 // Form içindeki soru sayılarını verilen düzene ayarlar (q: {ders: sayı})
+var DN_Q75={turkce:15,matematik:15,fen:15,sosyal:10,din:10,ingilizce:10};   // 75 soruluk deneme düzeni
 function dnSetQ(q){
   LGS_DERSLER.forEach(function(s){ document.getElementById("dn-q-"+s.id).value=q[s.id]; });
   updateDenemePreview();
@@ -1205,7 +1211,7 @@ function openDenemeForm(id){
   var rows=LGS_DERSLER.map(function(s){
     var x=(ex&&ex.d&&ex.d[s.id])||null;
     return '<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;align-items:center;margin-bottom:6px">'
-      +'<div style="font-size:13px;font-weight:800;color:#333;text-align:left">'+s.n+'</div>'
+      +'<div style="font-size:13px;font-weight:800;color:#333;text-align:left">'+s.n+' <span id="dn-ql-'+s.id+'" style="color:#666;font-weight:700">('+q0[s.id]+')</span></div>'
       +'<input id="dn-c-'+s.id+'" type="number" inputmode="numeric" min="0" max="60" aria-label="'+s.n+' doğru" placeholder="Doğru" value="'+(x?x.c:"")+'" oninput="updateDenemePreview()" style="'+inp+';border-color:#86c99a">'
       +'<input id="dn-w-'+s.id+'" type="number" inputmode="numeric" min="0" max="60" aria-label="'+s.n+' yanlış" placeholder="Yanlış" value="'+(x?x.w:"")+'" oninput="updateDenemePreview()" style="'+inp+';border-color:#f0a0a0">'
       +'</div>';
@@ -1218,9 +1224,7 @@ function openDenemeForm(id){
       return '<label style="font-size:11px;font-weight:800;color:#666;text-align:center">'+s.s
         +'<input id="dn-q-'+s.id+'" type="number" inputmode="numeric" min="1" max="60" aria-label="'+s.n+' soru sayısı" value="'+q0[s.id]+'" oninput="updateDenemePreview()" style="'+inp+';font-size:15px;margin-top:2px"></label>';
     }).join("")+'</div>'
-    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
-    +'<button type="button" onclick="dnSetQ({turkce:15,matematik:15,fen:15,sosyal:10,din:10,ingilizce:10})" style="padding:6px 10px;border-radius:8px;border:2px solid #e5e7eb;background:white;font-size:11px;font-weight:800;color:#555;cursor:pointer;font-family:Nunito,sans-serif">75 soru (15-15-15-10-10-10)</button>'
-    +'<button type="button" onclick="dnResetQ()" style="padding:6px 10px;border-radius:8px;border:2px solid #e5e7eb;background:white;font-size:11px;font-weight:800;color:#555;cursor:pointer;font-family:Nunito,sans-serif">LGS düzeni (90)</button></div></details>';
+    +'</details>';
   var pop=document.createElement("div");
   pop.id="dn-pop"; pop.setAttribute("role","dialog"); pop.setAttribute("aria-modal","true"); pop.setAttribute("aria-label","Deneme sonucu");
   pop.style.cssText="position:fixed;inset:0;background:#0007;z-index:998;display:flex;align-items:flex-start;justify-content:center;padding:14px;overflow:auto";
@@ -1230,6 +1234,9 @@ function openDenemeForm(id){
     +'<input id="dn-date" type="date" min="'+START+'" max="'+today()+'" value="'+date+'" aria-label="Deneme tarihi" style="'+inp+';font-size:14px">'
     +'<input id="dn-name" type="text" maxlength="60" placeholder="Deneme adı (isteğe bağlı)" aria-label="Deneme adı" value="'+escHtml(ex&&ex.name)+'" style="'+inp+';font-size:13px;font-weight:700">'
     +'</div>'
+    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><span style="font-size:12px;font-weight:800;color:#666">Deneme türü:</span>'
+    +'<button type="button" id="dn-fmt-90" class="chart-tab" onclick="dnResetQ()">LGS (90 soru)</button>'
+    +'<button type="button" id="dn-fmt-75" class="chart-tab" onclick="dnSetQ(DN_Q75)">75 soru</button></div>'
     +'<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;font-size:12px;font-weight:800;color:#666;margin-bottom:4px"><div></div><div style="text-align:center;color:#15803d">Doğru</div><div style="text-align:center;color:#dc2626">Yanlış</div></div>'
     +rows+qBox
     +'<div id="dn-preview" style="background:#EEF2FF;border-radius:12px;padding:10px;font-size:13px;font-weight:700;color:#333;margin-top:8px;text-align:center"></div>'
@@ -1423,10 +1430,15 @@ function denemeRowsHtml(items,edit,src){
       +'<div style="font-size:14px;font-weight:900;color:var(--p)">≈ '+s.puan+'</div></div>'
       +'<div style="font-size:12px;font-weight:700;color:#666;margin-bottom:4px">Toplam net <b style="color:#333">'+fnet(s.total)+'</b> / '+s.qTotal+(s.qTotal!==90?' <span style="color:#767676">(özel soru sayısı)</span>':'')+(prev?' · önceki denemeye göre '+dnDelta(s.eqTotal-prev.eqTotal):'')+'</div>'
       +'<div>'+chips+'</div>'
+      +(edit&&!r.q&&dnLooks75(r.d)?'<div style="font-size:11px;font-weight:700;color:#b45309;margin:2px 0 4px">💡 Bu deneme 75 soruluk gibi görünüyor. Düzenle > "75 soru" ile soru sayısını ayarlarsan puan doğru hesaplanır.</div>':'')
       +(edit?'<div style="display:flex;gap:6px;margin-top:2px"><button onclick="openDenemeForm(\''+x.id+'\')" style="padding:5px 10px;border-radius:8px;border:2px solid #e5e7eb;background:white;font-size:11px;font-weight:800;color:#555;cursor:pointer;font-family:Nunito,sans-serif">Düzenle</button>'
         +'<button onclick="deleteDeneme(\''+x.id+'\')" style="padding:5px 10px;border-radius:8px;border:2px solid #fecaca;background:white;font-size:11px;font-weight:800;color:#dc2626;cursor:pointer;font-family:Nunito,sans-serif">Sil</button></div>':'')
       +'</div>';
   }).join("");
+}
+// Doğru + yanlış her derste tam 75 soruluk düzene (15-15-15-10-10-10) eşitse, soru sayısı girilmemiş olsa da büyük olasılıkla 75 soruluktur
+function dnLooks75(d){
+  return LGS_DERSLER.every(function(s){ var x=d&&d[s.id]; return x&&((x.c||0)+(x.w||0))===DN_Q75[s.id]; });
 }
 function denemeItems(src,use){
   return denemeChrono(src,use).reverse();   // yeniden eskiye
