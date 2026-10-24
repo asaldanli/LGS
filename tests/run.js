@@ -196,6 +196,54 @@ test("deneme: seçili aylara göre süzülür ve yeniden eskiye sıralanır", ()
   assert.strictEqual(app.denemeItems({}, ["2026-10"]).length, 0);
 });
 
+const DK = (turkce, matematik, fen, sosyal, din, ingilizce) => ({
+  turkce: { c: turkce[0], w: turkce[1] }, matematik: { c: matematik[0], w: matematik[1] }, fen: { c: fen[0], w: fen[1] },
+  sosyal: { c: sosyal[0], w: sosyal[1] }, din: { c: din[0], w: din[1] }, ingilizce: { c: ingilizce[0], w: ingilizce[1] },
+});
+const J2 = (x) => JSON.parse(JSON.stringify(x));
+
+test("deneme analizi: kronolojik sıra, ay süzme, ortalama, en iyi, son ve ilk denemeye göre değişim", () => {
+  const src = {
+    b: { date: "2026-10-09", d: DK([18, 2], [15, 3], [13, 4], [8, 1], [9, 0], [7, 3]) },
+    a: { date: "2026-09-14", d: DK([16, 3], [12, 6], [11, 5], [7, 2], [8, 1], [6, 3]) },
+    c: { date: "2026-08-01", d: DK([10, 5], [8, 8], [8, 6], [5, 3], [6, 2], [4, 4]) },
+  };
+  const all = app.denemeChrono(src, null);
+  assert.deepStrictEqual(Array.from(all.map((x) => x.id)), ["c", "a", "b"]);
+  assert.deepStrictEqual(Array.from(app.denemeChrono(src, ["2026-09", "2026-10"]).map((x) => x.id)), ["a", "b"]);
+  assert.deepStrictEqual(Array.from(app.denemeItems(src, ["2026-09", "2026-10"]).map((x) => x.id)), ["b", "a"]);
+  const an = app.denemeAnaliz(app.denemeChrono(src, ["2026-09", "2026-10"]));
+  assert.strictEqual(an.count, 2);
+  // Matematik: eylül 12 - 6/3 = 10, ekim 15 - 3/3 = 14
+  assert.strictEqual(app.fnet(an.courses.matematik.avg), 12);
+  assert.strictEqual(app.fnet(an.courses.matematik.best), 14);
+  assert.strictEqual(app.fnet(an.courses.matematik.last), 14);
+  assert.strictEqual(app.fnet(an.courses.matematik.delta), 4);
+  assert.strictEqual(Math.round(an.courses.matematik.pct), 60);    // 12 / 20
+  assert.strictEqual(an.courses.matematik.c, 27); assert.strictEqual(an.courses.matematik.w, 9);
+  assert.strictEqual(app.fnet(an.total.last - an.total.first), app.fnet(an.total.delta));
+  assert.ok(an.puan.delta > 0);
+});
+
+test("deneme analizi: tek deneme değişim vermez; en güçlü ve en zayıf ders başarı yüzdesine göre", () => {
+  const one = { a: { date: "2026-10-01", d: DK([19, 1], [10, 10], [14, 2], [9, 0], [5, 4], [8, 1]) } };
+  const an = app.denemeAnaliz(app.denemeChrono(one, null));
+  assert.strictEqual(an.count, 1);
+  assert.strictEqual(an.total.delta, null);
+  assert.strictEqual(an.courses.turkce.delta, null);
+  assert.strictEqual(an.strongest, "turkce");    // 18,67 net / 20 soru = %93 (İnkılap %90, Fen %66,7 ...)
+  assert.strictEqual(an.weakest, "matematik");   // 6,67 net / 20 soru = %33 (Din %36,7)
+  assert.strictEqual(app.denemeAnaliz([]), null);
+});
+
+test("deneme analizi: grafik değeri net ya da ders başarı yüzdesi", () => {
+  const s = app.denemeSonuc(DK([18, 3], [10, 0], [0, 0], [0, 0], [0, 0], [0, 0]));
+  const tr = app.LGS_DERSLER[0], din = app.LGS_DERSLER[4];
+  assert.strictEqual(app.dnVal(s, tr, "net"), 17);
+  assert.strictEqual(app.dnVal(s, tr, "pct"), 85);
+  assert.strictEqual(app.dnVal(s, din, "pct"), 0);
+});
+
 test("kayıt: sekme kapanırken bekleyen değer hemen yazılır, çift yazım olmaz", () => {
   const a = load("2026-10-18T12:00:00+03:00");
   const writes = [];

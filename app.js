@@ -273,7 +273,7 @@ function showPicker(){
 // Önceki oturumdan kalan görünüm ve durumları sıfırlar (öğrenci/yönetici/öğretmen geçişinde)
 function resetSessionUI(){
   var student=["daily","weekly","monthly","stats"];
-  var admin=["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats","cmp-goals"];
+  var admin=["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats","cmp-deneme","cmp-goals"];
   student.forEach(function(t){ var el=document.getElementById("nb-"+t); if(el){ el.style.display=""; el.className=t==="daily"?"act":""; } });
   admin.forEach(function(t){ var el=document.getElementById("nb-"+t); if(el){ el.style.display="none"; el.className=""; } });
   var cs=document.getElementById("nb-cmp-stats"); if(cs) cs.textContent="📈 İstatistik";   // öğretmen oturumunda "Karşılaştırma" olur
@@ -285,6 +285,7 @@ function resetSessionUI(){
   Object.keys(_charts).forEach(function(k){ destroyChart(k); });
   statsSelMonths=[]; statsInit=false; admSelMonths=[]; admInit=false; admStudents=['omer','zeynep']; admSubject='all'; admMetric='acc'; expSubj=null; curView="daily";
   admGoalStudent="omer"; admGoalMonth=null; admGoalDraft=null; admGoalMsg="";
+  dnaMonths=[]; dnaStudents=['omer','zeynep']; dnaCourse='all'; dnMetric="net";
   document.getElementById("vw").innerHTML="";
 }
 
@@ -314,7 +315,7 @@ function pickStudent(sid){
       document.getElementById("hdr-sub").textContent="👑";
       document.getElementById("hdr-name").textContent="Yönetici Paneli";
       document.getElementById("ro-pill").style.display="inline-flex";
-      ["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats","cmp-goals"].forEach(function(t){
+      ["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats","cmp-deneme","cmp-goals"].forEach(function(t){
         var el=document.getElementById("nb-"+t); if(el) el.style.display="flex";
       });
       ["daily","weekly","monthly","stats"].forEach(function(t){
@@ -343,11 +344,11 @@ function pickStudent(sid){
       // Her iki öğrencinin deneme sonuçları (istatistik ekranı için)
       denemeRef=db.ref("denemeler/omer"); denemeErr=false;
       denemeListener=denemeRef.on("value",function(snap){
-        denemelerBy.omer=snap.val()||{}; if(curView==="cmp-stats") renderCmpStats();
+        denemelerBy.omer=snap.val()||{}; if(curView==="cmp-deneme") renderCmpDeneme();
       },function(){ denemelerBy.omer={}; });
       denemeRefZ=db.ref("denemeler/zeynep");
       denemeListenerZ=denemeRefZ.on("value",function(snap){
-        denemelerBy.zeynep=snap.val()||{}; if(curView==="cmp-stats") renderCmpStats();
+        denemelerBy.zeynep=snap.val()||{}; if(curView==="cmp-deneme") renderCmpDeneme();
       },function(){ denemelerBy.zeynep={}; });
       return;
     }
@@ -385,15 +386,17 @@ function pickStudent(sid){
     denemeErr=false;
     denemeRef=db.ref("denemeler/"+sid);
     denemeListener=denemeRef.on("value",function(snap){
-      denemeler=snap.val()||{}; denemelerBy[sid]=denemeler; denemeErr=false; if(curView==="stats") renderStats();
+      denemeler=snap.val()||{}; denemelerBy[sid]=denemeler; denemeErr=false;
+      if(curView==="stats") renderStats(); else if(curView==="cmp-deneme") renderCmpDeneme();
     },function(){ denemeler={}; denemeErr=true; });
-    // Öğretmen hesabı: diğer öğrencinin verisi de okunur, "Karşılaştırma" sekmesi açılır
+    // Öğretmen hesabı: diğer öğrencinin verisi de okunur; "Karşılaştırma" ve "Deneme Analiz" sekmeleri açılır
     if(_teacherMode){
       var other=sid==="omer"?"zeynep":"omer";
       var tb=document.getElementById("nb-cmp-stats");
       if(tb){ tb.textContent="👥 Karşılaştırma"; tb.style.display="flex"; }
+      var tdn=document.getElementById("nb-cmp-deneme"); if(tdn) tdn.style.display="flex";
       db.ref("records/"+other).once("value",function(s2){ cmpRecs=s2.val()||{}; if(curView==="cmp-stats") renderCmpStats(); },function(){});
-      db.ref("denemeler/"+other).once("value",function(s2){ denemelerBy[other]=s2.val()||{}; if(curView==="cmp-stats") renderCmpStats(); },function(){});
+      db.ref("denemeler/"+other).once("value",function(s2){ denemelerBy[other]=s2.val()||{}; if(curView==="cmp-deneme") renderCmpDeneme(); },function(){});
     }
     loadProfilePics();
     gv("daily");
@@ -610,12 +613,12 @@ function goalMonths(){
 // ═══════════════════════════════════════════════════════════════════
 function gv(v){
   curView=v; expSubj=null;
-  ["daily","weekly","monthly","stats","cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats","cmp-goals"].forEach(function(x){
+  ["daily","weekly","monthly","stats","cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats","cmp-deneme","cmp-goals"].forEach(function(x){
     var el=document.getElementById("nb-"+x); if(el) el.className=x===v?"act":"";
   });
   render();
 }
-function render(){ if(!db||!curStudent)return; var fn={daily:renderDaily,weekly:renderWeekly,monthly:renderMonthly,stats:renderStats,"cmp-daily":renderCmpDaily,"cmp-weekly":renderCmpWeekly,"cmp-monthly":renderCmpMonthly,"cmp-all":renderCmpAll,"cmp-subj":renderCmpSubj,"cmp-stats":renderCmpStats,"cmp-goals":renderCmpGoals}; (fn[curView]||renderDaily)(); updateHdr(); }
+function render(){ if(!db||!curStudent)return; var fn={daily:renderDaily,weekly:renderWeekly,monthly:renderMonthly,stats:renderStats,"cmp-daily":renderCmpDaily,"cmp-weekly":renderCmpWeekly,"cmp-monthly":renderCmpMonthly,"cmp-all":renderCmpAll,"cmp-subj":renderCmpSubj,"cmp-stats":renderCmpStats,"cmp-deneme":renderCmpDeneme,"cmp-goals":renderCmpGoals}; (fn[curView]||renderDaily)(); updateHdr(); }
 
 function updateHdr(){
   var s=dstats(selDate);
@@ -1224,40 +1227,183 @@ function deleteDeneme(id){
   }).then(function(){ render(); }).catch(function(){ alert("Silinemedi."); });
 }
 
-// İstatistik sayfası: seçili aylardaki deneme sonuçları, ders netleri ve tahmini puan
+// ═══════════════════════════════════════════════════════════════════
+//  DENEME ANALİZİ
+//  Öğrenci istatistiğindeki "Deneme Sonuçları" kartı ile yönetici/öğretmen "Deneme Analiz" ekranı aynı hesapları kullanır.
+//  Net = doğru - yanlış / 3. Ders başarısı = ders neti / ders soru sayısı. Puan, LGS_DERSLER.p ile hesaplanan tahmindir.
+// ═══════════════════════════════════════════════════════════════════
+var dnMetric="net";                     // net | pct (ders başarı yüzdesi)
+var dnaMonths=[], dnaStudents=['omer','zeynep'], dnaCourse='all';
+function r1(x){ return Math.round(x*10)/10; }
+function num1(x){ return String(r1(x)); }   // uygulamanın geri kalanı gibi ondalık ayırıcı nokta
+function setDnMetric(m){ dnMetric=m; if(curView==="cmp-deneme") renderCmpDeneme(); else if(curView==="stats") renderStats(); }
+
+// Eskiden yeniye sıralı deneme listesi: [{id, r: kayıt, s: denemeSonuc}]. use = ay listesi (null: hepsi)
+function denemeChrono(src,use){
+  return Object.keys(src||{}).map(function(k){ return {id:k,r:src[k]}; })
+    .filter(function(x){ return x.r&&x.r.date&&(!use||use.indexOf(x.r.date.slice(0,7))>=0); })
+    .sort(function(a,b){ return a.r.date<b.r.date?-1:a.r.date>b.r.date?1:(a.id<b.id?-1:1); })
+    .map(function(x){ x.s=denemeSonuc(x.r.d); return x; });
+}
+function dnAgg(vals){
+  var n=vals.length, sum=vals.reduce(function(a,b){ return a+b; },0);
+  return {avg:sum/n,best:Math.max.apply(null,vals),worst:Math.min.apply(null,vals),first:vals[0],last:vals[n-1],
+    delta:n>1?vals[n-1]-vals[0]:null};   // delta: ilk denemeden sonuncuya değişim
+}
+// Kronolojik listenin özeti: toplam net, puan ve her ders için ortalama, en iyi, son, değişim, başarı %
+function denemeAnaliz(items){
+  var n=items.length; if(!n) return null;
+  var out={count:n,total:dnAgg(items.map(function(x){ return x.s.total; })),puan:dnAgg(items.map(function(x){ return x.s.puan; })),courses:{}};
+  var best=null, worst=null;
+  LGS_DERSLER.forEach(function(d){
+    var a=dnAgg(items.map(function(x){ return x.s.nets[d.id]; })), c=0, w=0;
+    items.forEach(function(x){ var y=x.r.d&&x.r.d[d.id]; if(y){ c+=y.c||0; w+=y.w||0; } });
+    a.pct=a.avg/d.q*100; a.c=c; a.w=w; a.q=d.q; a.id=d.id;
+    out.courses[d.id]=a;
+    if(!best||a.pct>best.pct) best=a;
+    if(!worst||a.pct<worst.pct) worst=a;
+  });
+  out.strongest=best.id; out.weakest=worst.id;
+  return out;
+}
+// Grafik değeri: net ya da ders başarı yüzdesi
+function dnVal(s,d,metric){ var net=s.nets[d.id]; return metric==="pct"?r1(net/d.q*100):r1(net); }
+function dnDelta(dv,unit){
+  if(dv===null||dv===undefined) return '<span style="color:#767676">—</span>';
+  var r=r1(dv), col=r>0?"#15803d":r<0?"#dc2626":"#666";
+  return '<span style="font-weight:900;color:'+col+';white-space:nowrap">'+(r>0?"▲ +":r<0?"▼ ":"= ")+String(r)+(unit||"")+'</span>';
+}
+function dnMetricBtns(){
+  return '<div style="display:flex;gap:6px;margin-bottom:8px">'+[["net","Net"],["pct","Başarı %"]].map(function(o){
+    return '<button class="chart-tab'+(dnMetric===o[0]?' act':'')+'" onclick="setDnMetric(\''+o[0]+'\')">'+o[1]+'</button>';
+  }).join("")+'</div>';
+}
+// Özet kutuları: deneme sayısı, ortalama, en iyi ve son net (ilk denemeye göre değişim)
+function dnSummaryHtml(a){
+  var box=function(lbl,val,sub){
+    return '<div style="background:#f9fafb;border-radius:12px;padding:8px 4px;text-align:center;min-width:0"><div style="font-size:11px;font-weight:800;color:#767676">'+lbl+'</div>'
+      +'<div style="font-size:17px;font-weight:900;color:#222">'+val+'</div>'+(sub?'<div style="font-size:11px;font-weight:700;color:#555">'+sub+'</div>':'')+'</div>';
+  };
+  return '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:6px 0 10px">'
+    +box("Deneme",a.count,"")+box("Ort. net",fnet(a.total.avg),"≈ "+Math.round(a.puan.avg))
+    +box("En iyi",fnet(a.total.best),"≈ "+a.puan.best)+box("Son",fnet(a.total.last),dnDelta(a.total.delta))+'</div>';
+}
+// Ders tablosu: ortalama net, başarı %, en iyi, son, ilk denemeye göre değişim; en güçlü ve en zayıf ders işaretlenir
+function dnCourseTableHtml(a,onlyId){
+  var cols="grid-template-columns:1.5fr .9fr .9fr .9fr .8fr 1.2fr", cell="font-size:12px;font-weight:700;color:#333;text-align:center;min-width:0";
+  var html='<div style="display:grid;'+cols+';gap:4px;font-size:11px;font-weight:800;color:#767676;padding-bottom:4px;border-bottom:2px solid #f3f4f6">'
+    +'<div>Ders</div><div style="text-align:center">Ort. net</div><div style="text-align:center">Başarı</div><div style="text-align:center">En iyi</div><div style="text-align:center">Son</div><div style="text-align:center">Değişim</div></div>';
+  LGS_DERSLER.forEach(function(d){
+    if(onlyId&&onlyId!=="all"&&d.id!==onlyId) return;
+    var c=a.courses[d.id], mark="";
+    if(onlyId==="all"||!onlyId){
+      if(d.id===a.strongest) mark='<div style="font-size:10px;font-weight:800;color:#15803d">en güçlü</div>';
+      else if(d.id===a.weakest) mark='<div style="font-size:10px;font-weight:800;color:#b45309">geliştirilmeli</div>';
+    }
+    html+='<div style="display:grid;'+cols+';gap:4px;align-items:center;padding:7px 0;border-bottom:1px solid #f3f4f6">'
+      +'<div style="font-size:12px;font-weight:800;color:#333;min-width:0">'+d.n+mark+'</div>'
+      +'<div style="'+cell+'">'+fnet(c.avg)+'</div>'
+      +'<div style="'+cell+'">%'+num1(c.pct)+'</div>'
+      +'<div style="'+cell+'">'+fnet(c.best)+'</div>'
+      +'<div style="'+cell+'">'+fnet(c.last)+'</div>'
+      +'<div style="'+cell+'">'+dnDelta(c.delta)+'</div></div>';
+  });
+  return html+'<div style="font-size:11px;color:#767676;font-weight:700;margin-top:4px">Başarı = ortalama net / ders soru sayısı. Değişim = ilk denemeden sonuncuya net farkı.</div>';
+}
+// Ders bazlı değişim çizgi grafiği (her ders bir çizgi). items kronolojik; only = tek ders kimliği ya da boş
+function drawDenemeCourseChart(elId,key,items,metric,only){
+  destroyChart(key);
+  var el=document.getElementById(elId); if(!el||items.length<2) return;
+  var pct=metric==="pct";
+  var ds=LGS_DERSLER.filter(function(d){ return !only||d.id===only; }).map(function(d){
+    var sj=SUBJ.find(function(s){ return s.id===d.id; }), i=SUBJ.indexOf(sj);
+    return {label:d.n,data:items.map(function(x){ return dnVal(x.s,d,metric); }),borderColor:sj.c,backgroundColor:sj.c,
+      borderWidth:2.5,borderDash:TREND_DASH[i],pointStyle:TREND_PTS[i],pointRadius:4,tension:0.2};
+  });
+  _charts[key]=new Chart(el,{
+    type:"line",
+    data:{labels:items.map(function(x){ return shortD(x.r.date).slice(0,5); }),datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:11},boxWidth:14,usePointStyle:true}}},
+      scales:{x:{grid:{display:false},ticks:{font:{family:"Nunito",size:11}}},
+        y:{beginAtZero:true,suggestedMax:pct?100:20,max:pct?100:undefined,grid:{color:"#f3f4f6"},ticks:{font:{family:"Nunito",size:11}},title:{display:true,text:pct?"Başarı %":"Net",font:{size:11}}}}}
+  });
+}
+// Toplam net (sol eksen) ve tahmini puan (sağ eksen) gelişimi. series: [{label,color,items}] (kronolojik)
+function drawDenemeTotalChart(elId,key,series){
+  destroyChart(key);
+  var el=document.getElementById(elId); if(!el) return;
+  var dates={}; series.forEach(function(s){ s.items.forEach(function(x){ dates[x.r.date]=1; }); });
+  var labels=Object.keys(dates).sort();
+  if(labels.length<2) return;
+  var ds=[];
+  series.forEach(function(s){
+    var by={}; s.items.forEach(function(x){ by[x.r.date]=x.s; });
+    var one=series.length===1;
+    ds.push({label:(one?"Toplam net":s.label+" net"),data:labels.map(function(d){ return by[d]?fnet(by[d].total):null; }),borderColor:s.color,backgroundColor:s.color,borderWidth:2.5,pointStyle:"circle",pointRadius:5,tension:0.2,spanGaps:true,yAxisID:"y"});
+    ds.push({label:(one?"Tahmini puan":s.label+" puan"),data:labels.map(function(d){ return by[d]?by[d].puan:null; }),borderColor:s.color,backgroundColor:s.color,borderWidth:2,borderDash:[6,3],pointStyle:"rect",pointRadius:5,tension:0.2,spanGaps:true,yAxisID:"y2"});
+  });
+  _charts[key]=new Chart(el,{type:"line",data:{labels:labels.map(function(d){ return shortD(d).slice(0,5); }),datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:11},boxWidth:14,usePointStyle:true}}},
+      scales:{x:{grid:{display:false},ticks:{font:{family:"Nunito",size:11}}},
+        y:{beginAtZero:true,max:90,grid:{color:"#f3f4f6"},ticks:{font:{family:"Nunito",size:11}},title:{display:true,text:"Net",font:{size:11}}},
+        y2:{position:"right",min:100,max:500,grid:{display:false},ticks:{font:{family:"Nunito",size:11}},title:{display:true,text:"Puan",font:{size:11}}}}}});
+}
+
+// Deneme satırları (yeniden eskiye): ders netleri ve bir önceki denemeye göre değişim. src = öğrencinin tüm denemeleri
+function denemeRowsHtml(items,edit,src){
+  var all=denemeChrono(src||{},null);
+  return items.map(function(x){
+    var r=x.r, s=denemeSonuc(r.d), pos=-1;
+    all.forEach(function(a,i){ if(a.id===x.id) pos=i; });
+    var prev=pos>0?all[pos-1].s:null;
+    var chips=LGS_DERSLER.map(function(d){
+      var n=s.nets[d.id], dv=prev?n-prev.nets[d.id]:null;
+      return '<span style="display:inline-block;background:#f3f4f6;border-radius:8px;padding:3px 7px;font-size:11px;font-weight:800;color:#333;margin:0 4px 4px 0">'+d.s+' <span style="color:'+(n>=0?"#15803d":"#dc2626")+'">'+fnet(n)+'</span>'
+        +(dv!==null&&r1(dv)!==0?' <span style="font-size:10px;color:'+(dv>0?"#15803d":"#dc2626")+'">'+(dv>0?"▲":"▼")+num1(Math.abs(dv))+'</span>':'')+'</span>';
+    }).join("");
+    return '<div style="padding:10px 0;border-bottom:1px solid #f3f4f6">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div style="flex:1;font-size:13px;font-weight:900;color:#333">'+fmtD(r.date)+(r.name?' <span style="color:#666;font-weight:700">· '+escHtml(r.name)+'</span>':'')+'</div>'
+      +'<div style="font-size:14px;font-weight:900;color:var(--p)">≈ '+s.puan+'</div></div>'
+      +'<div style="font-size:12px;font-weight:700;color:#666;margin-bottom:4px">Toplam net <b style="color:#333">'+fnet(s.total)+'</b> / 90'+(prev?' · önceki denemeye göre '+dnDelta(s.total-prev.total):'')+'</div>'
+      +'<div>'+chips+'</div>'
+      +(edit?'<div style="display:flex;gap:6px;margin-top:2px"><button onclick="openDenemeForm(\''+x.id+'\')" style="padding:5px 10px;border-radius:8px;border:2px solid #e5e7eb;background:white;font-size:11px;font-weight:800;color:#555;cursor:pointer;font-family:Nunito,sans-serif">Düzenle</button>'
+        +'<button onclick="deleteDeneme(\''+x.id+'\')" style="padding:5px 10px;border-radius:8px;border:2px solid #fecaca;background:white;font-size:11px;font-weight:800;color:#dc2626;cursor:pointer;font-family:Nunito,sans-serif">Sil</button></div>':'')
+      +'</div>';
+  }).join("");
+}
+function denemeItems(src,use){
+  return denemeChrono(src,use).reverse();   // yeniden eskiye
+}
+function dnNoteHtml(){
+  return '<div style="font-size:11px;color:#666;font-weight:700;margin-top:8px">Net = Doğru − Yanlış ÷ 3. ≈ puan, '+LGS_PUAN_YILI+' LGS\'de 1 netin ders başına puan getirisiyle hesaplanır: '
+    +LGS_DERSLER.map(function(d){ return d.n+' '+String(d.p).replace(".",","); }).join(", ")+' (90 net = 500 puan olacak şekilde). Resmi puan her yıl sınavın dağılımına göre değişir, bu yalnızca bir tahmindir.</div>';
+}
+
+// İstatistik sayfası: seçili aylardaki denemelerin özeti, ders bazlı analizi ve değişim grafikleri
 function statsDenemeCard(){
   var use=smUseMonths(), edit=!READONLY&&!_teacherMode;
-  var list=denemeItems(denemeler,use);
+  var chrono=denemeChrono(denemeler,use), list=chrono.slice().reverse();
   var head='<div class="card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div class="card-ttl" style="margin:0;flex:1">📝 Deneme Sonuçları <span style="font-size:12px;color:#666;font-weight:700">· '+statsSelLabel()+'</span></div>'
     +(edit?'<button onclick="openDenemeForm()" style="padding:8px 12px;border-radius:10px;border:none;background:var(--p);color:white;font-size:12px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif">➕ Ekle</button>':'')+'</div>';
   if(denemeErr) return head+'<div style="font-size:12px;color:#dc2626;font-weight:700;padding:8px 0">Deneme sonuçları okunamadı (Firebase kuralları güncellenmemiş olabilir).</div></div>';
   if(!list.length) return head+'<div style="font-size:12px;color:#666;font-weight:700;padding:8px 0">Seçili aylarda ders bazlı deneme sonucu yok.'+(edit?' "Ekle" ile ilk denemeni girebilirsin.':'')+'</div></div>';
-  var rows=denemeRowsHtml(list,edit);
-  var chart=list.length>1?'<div style="font-size:12px;font-weight:800;color:#666;margin:12px 0 6px">Gelişim: toplam net ve tahmini puan</div><div style="position:relative;height:220px"><canvas id="dn-trend" role="img" aria-label="Deneme toplam net ve tahmini puan grafiği"></canvas></div>':"";
-  return head+rows+chart
-    +'<div style="font-size:11px;color:#666;font-weight:700;margin-top:8px">Net = Doğru − Yanlış ÷ 3. ≈ puan, '+LGS_PUAN_YILI+' LGS\'de 1 netin ders başına puan getirisiyle hesaplanır: '+LGS_DERSLER.map(function(d){ return d.n+' '+String(d.p).replace(".",","); }).join(", ")+' (90 net = 500 puan olacak şekilde). Resmi puan her yıl sınavın dağılımına göre değişir, bu yalnızca bir tahmindir.</div></div>';
+  var a=denemeAnaliz(chrono), many=a.count>1;
+  var sec=function(t){ return '<div style="font-size:13px;font-weight:900;color:#333;margin:14px 0 6px">'+t+'</div>'; };
+  return head+dnSummaryHtml(a)
+    +sec('📚 Ders Bazlı Analiz')+dnCourseTableHtml(a,"all")
+    +sec('📈 Toplam Net ve Tahmini Puan')
+    +(many?'<div style="position:relative;height:220px"><canvas id="dn-trend" role="img" aria-label="Deneme toplam net ve tahmini puan grafiği"></canvas></div>'
+      :'<div style="font-size:12px;color:#767676;font-weight:700">Değişim grafikleri için en az 2 deneme gerekir.</div>')
+    +(many?sec('📊 Ders Bazlı Değişim')+dnMetricBtns()
+      +'<div style="position:relative;height:260px"><canvas id="dn-course" role="img" aria-label="Derslere göre deneme değişim grafiği"></canvas></div>':'')
+    +sec('🗂️ Denemeler')+denemeRowsHtml(list,edit,denemeler)+dnNoteHtml()+'</div>';
 }
 function drawDenemeChart(){
-  destroyChart("dn");
-  var el=document.getElementById("dn-trend"); if(!el) return;
-  var use=smUseMonths();
-  var list=Object.keys(denemeler).map(function(k){ return denemeler[k]; })
-    .filter(function(r){ return r&&r.date&&use.indexOf(r.date.slice(0,7))>=0; })
-    .sort(function(a,b){ return a.date<b.date?-1:a.date>b.date?1:0; });
-  if(list.length<2) return;
-  var res=list.map(function(r){ return denemeSonuc(r.d); });
-  _charts["dn"]=new Chart(el,{
-    type:"line",
-    data:{labels:list.map(function(r){ return shortD(r.date).slice(0,5); }),datasets:[
-      {label:"Toplam net",data:res.map(function(s){ return fnet(s.total); }),borderColor:"#4F46E5",backgroundColor:"#4F46E5",borderWidth:2.5,pointStyle:"circle",pointRadius:5,tension:0.2,yAxisID:"y"},
-      {label:"Tahmini puan",data:res.map(function(s){ return s.puan; }),borderColor:"#d97706",backgroundColor:"#d97706",borderWidth:2.5,borderDash:[6,3],pointStyle:"rect",pointRadius:5,tension:0.2,yAxisID:"y2"}
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
-      plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:12},boxWidth:14,usePointStyle:true}}},
-      scales:{x:{grid:{display:false},ticks:{font:{family:"Nunito",size:11}}},
-        y:{beginAtZero:true,max:90,grid:{color:"#f3f4f6"},ticks:{font:{family:"Nunito",size:11}},title:{display:true,text:"Net",font:{size:11}}},
-        y2:{position:"right",min:100,max:500,grid:{display:false},ticks:{font:{family:"Nunito",size:11}},title:{display:true,text:"Puan",font:{size:11}}}}}
-  });
+  var use=smUseMonths(), chrono=denemeChrono(denemeler,use);
+  drawDenemeTotalChart("dn-trend","dn",[{label:"",color:"#4F46E5",items:chrono}]);
+  drawDenemeCourseChart("dn-course","dnCourse",chrono,dnMetric,null);
 }
 
 // ── Rekorlar: en yüksek günlük soru sayısı (ders bazında ve günlük toplam) ──
@@ -2993,46 +3139,190 @@ function renderCmpStats(){
     +'<div style="font-size:12px;color:#767676;font-weight:700;margin-top:8px">Seçili aylar: '+use.map(smLabel).join(", ")+' · Net = Doğru − Yanlış ÷ '+NET_DIVISOR+'</div></div>';
 
   // ── Deneme sonuçları: ders bazında detay ve puanlar ──
-  html+=admDenemeHtml(sids,use);
+  html+='<div class="card" style="display:flex;align-items:center;gap:10px"><div style="flex:1"><div style="font-size:14px;font-weight:900;color:#333">📝 Deneme sonuçları</div>'
+    +'<div style="font-size:12px;color:#767676;font-weight:700">Ders bazlı net, puan ve değişim analizi ayrı bir sekmede.</div></div>'
+    +'<button onclick="gv(\'cmp-deneme\')" style="padding:10px 14px;border-radius:12px;border:none;background:var(--p);color:white;font-size:13px;font-weight:800;cursor:pointer;font-family:Nunito,sans-serif">Deneme Analiz</button></div>';
 
   document.getElementById("vw").innerHTML=html;
   setTimeout(function(){ drawAdmStatsCharts(); },30);
 }
 
-// Seçili öğrencilerin seçili aylardaki denemeleri: ders netleri, toplam net ve tahmini puan
-function denemeRowsHtml(items,edit){
+// ═══════════════════════════════════════════════════════════════════
+//  YÖNETİCİ / ÖĞRETMEN: DENEME ANALİZ (ay, öğrenci ve ders seçimi; özet, ders analizi, karşılaştırma, grafikler, ayrıntı)
+//  Veri: denemelerBy[öğrenci]. Yalnızca okunur (deneme girişi öğrenci hesabından yapılır).
+// ═══════════════════════════════════════════════════════════════════
+function dnaDataMonths(){
+  var set={};
+  ["omer","zeynep"].forEach(function(k){
+    var src=denemelerBy[k]||{};
+    Object.keys(src).forEach(function(id){ var r=src[id]; if(r&&r.date) set[r.date.slice(0,7)]=1; });
+  });
+  return Object.keys(set).sort();
+}
+function dnaUseMonths(){
+  var all=dnaDataMonths(), sel=dnaMonths.filter(function(m){ return all.indexOf(m)>=0; });
+  return sel.length?sel:all;
+}
+function dnaToggleMonth(m){ var i=dnaMonths.indexOf(m); if(i>=0) dnaMonths.splice(i,1); else dnaMonths.push(m); renderCmpDeneme(); }
+function dnaSetMonths(l){ dnaMonths=l; renderCmpDeneme(); }
+function dnaToggleStudent(sid){
+  var i=dnaStudents.indexOf(sid);
+  if(i>=0){ if(dnaStudents.length>1) dnaStudents.splice(i,1); } else dnaStudents.push(sid);
+  dnaStudents.sort(); renderCmpDeneme();
+}
+function dnaSetCourse(c){ dnaCourse=c; renderCmpDeneme(); }
+
+// Bir denemenin ders ayrıntısı (açılır satır): doğru, yanlış, net, başarı
+function dnDetailHtml(items,src){
+  var all=denemeChrono(src||{},null);
   return items.map(function(x){
-    var r=x.r, s=denemeSonuc(r.d);
-    var chips=LGS_DERSLER.map(function(d){
-      var n=s.nets[d.id];
-      return '<span style="display:inline-block;background:#f3f4f6;border-radius:8px;padding:3px 7px;font-size:11px;font-weight:800;color:#333;margin:0 4px 4px 0">'+d.s+' <span style="color:'+(n>=0?"#15803d":"#dc2626")+'">'+fnet(n)+'</span></span>';
+    var r=x.r, s=x.s, pos=-1;
+    all.forEach(function(a,i){ if(a.id===x.id) pos=i; });
+    var prev=pos>0?all[pos-1].s:null;
+    var cols="grid-template-columns:1.6fr .6fr .6fr .8fr .9fr 1fr", cell="font-size:12px;font-weight:700;color:#333;text-align:center";
+    var rows=LGS_DERSLER.map(function(d){
+      var y=(r.d&&r.d[d.id])||{c:0,w:0}, n=s.nets[d.id], dv=prev?n-prev.nets[d.id]:null;
+      return '<div style="display:grid;'+cols+';gap:4px;padding:5px 0;border-bottom:1px solid #f3f4f6;align-items:center">'
+        +'<div style="font-size:12px;font-weight:800;color:#333">'+d.n+'</div>'
+        +'<div style="'+cell+';color:#15803d">'+(y.c||0)+'</div><div style="'+cell+';color:#dc2626">'+(y.w||0)+'</div>'
+        +'<div style="'+cell+'">'+fnet(n)+'</div><div style="'+cell+'">%'+num1(n/d.q*100)+'</div><div style="'+cell+'">'+dnDelta(dv)+'</div></div>';
     }).join("");
-    return '<div style="padding:10px 0;border-bottom:1px solid #f3f4f6">'
-      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div style="flex:1;font-size:13px;font-weight:900;color:#333">'+fmtD(r.date)+(r.name?' <span style="color:#666;font-weight:700">· '+escHtml(r.name)+'</span>':'')+'</div>'
-      +'<div style="font-size:14px;font-weight:900;color:var(--p)">≈ '+s.puan+'</div></div>'
-      +'<div style="font-size:12px;font-weight:700;color:#666;margin-bottom:4px">Toplam net <b style="color:#333">'+fnet(s.total)+'</b> / 90</div>'
-      +'<div>'+chips+'</div>'
-      +(edit?'<div style="display:flex;gap:6px;margin-top:2px"><button onclick="openDenemeForm(\''+x.id+'\')" style="padding:5px 10px;border-radius:8px;border:2px solid #e5e7eb;background:white;font-size:11px;font-weight:800;color:#555;cursor:pointer;font-family:Nunito,sans-serif">Düzenle</button>'
-        +'<button onclick="deleteDeneme(\''+x.id+'\')" style="padding:5px 10px;border-radius:8px;border:2px solid #fecaca;background:white;font-size:11px;font-weight:800;color:#dc2626;cursor:pointer;font-family:Nunito,sans-serif">Sil</button></div>':'')
-      +'</div>';
+    return '<details style="border-bottom:1px solid #eee;padding:8px 0"><summary style="cursor:pointer;font-size:13px;font-weight:800;color:#333">'
+      +fmtD(r.date)+(r.name?' · '+escHtml(r.name):'')+' <span style="color:var(--p)">· net '+fnet(s.total)+' · ≈ '+s.puan+'</span></summary>'
+      +'<div style="margin-top:6px"><div style="display:grid;'+cols+';gap:4px;font-size:11px;font-weight:800;color:#767676;padding-bottom:3px;border-bottom:2px solid #f3f4f6">'
+      +'<div>Ders</div><div style="text-align:center">D</div><div style="text-align:center">Y</div><div style="text-align:center">Net</div><div style="text-align:center">Başarı</div><div style="text-align:center">Önceki</div></div>'
+      +rows+'</div></details>';
   }).join("");
 }
-function denemeItems(src,use){
-  return Object.keys(src||{}).map(function(k){ return {id:k,r:src[k]}; })
-    .filter(function(x){ return x.r&&x.r.date&&use.indexOf(x.r.date.slice(0,7))>=0; })
-    .sort(function(a,b){ return a.r.date<b.r.date?1:a.r.date>b.r.date?-1:0; });
-}
-function admDenemeHtml(sids,use){
-  var total=0;
-  var html='<div class="card"><div class="card-ttl" style="font-size:14px;margin-bottom:4px">📝 Deneme Sonuçları <span style="font-size:12px;color:#666;font-weight:700">· '+use.map(smLabel).join(", ")+'</span></div>';
+
+function renderCmpDeneme(){
+  var all=dnaDataMonths(), use=dnaUseMonths();
+  var sel=dnaMonths.filter(function(m){ return all.indexOf(m)>=0; });
+  var sids=dnaStudents.slice(), both=sids.length>1;
+  var html=adminHeader("Deneme Analiz",both?"İki öğrenci karşılaştırması":STUDENTS[sids[0]].short);
+  if(!all.length){
+    document.getElementById("vw").innerHTML=html+'<div class="card"><div class="empty" style="padding:16px"><div style="font-size:40px;margin-bottom:8px">📝</div><div>Henüz ders bazlı deneme sonucu yok.</div>'
+      +'<div style="font-size:12px;color:#767676;font-weight:700;margin-top:6px">Sonuçlar öğrenci hesabında İstatistik &gt; Deneme Sonuçları &gt; Ekle ile girilir.</div></div></div>';
+    return;
+  }
+  var chip=function(on,onclick,label){ return '<button class="chart-tab'+(on?' act':'')+'" onclick="'+onclick+'">'+label+'</button>'; };
+  html+='<div class="card">'
+    +'<div class="card-ttl" style="font-size:14px;margin-bottom:6px">🗓️ Ay</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'
+    +chip(!sel.length,"dnaSetMonths([])","Tümü")+all.map(function(m){ var p=parseYM(m); return chip(sel.indexOf(m)>=0,"dnaToggleMonth('"+m+"')",MONTHS[p.m]+' '+p.y); }).join("")+'</div>'
+    +'<div class="card-ttl" style="font-size:14px;margin-bottom:6px">👤 Öğrenci</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">'
+    +["omer","zeynep"].map(function(k){ return chip(sids.indexOf(k)>=0,"dnaToggleStudent('"+k+"')",STUDENTS[k].emoji+' '+STUDENTS[k].short); }).join("")+'</div>'
+    +'<div style="font-size:12px;color:#767676;font-weight:700;margin-bottom:12px">İki öğrenci seçilirse karşılaştırma gösterilir.</div>'
+    +'<div class="card-ttl" style="font-size:14px;margin-bottom:6px">📚 Ders</div><div style="display:flex;gap:6px;flex-wrap:wrap">'
+    +chip(dnaCourse==="all","dnaSetCourse('all')","Tüm dersler")+LGS_DERSLER.map(function(d){ return chip(dnaCourse===d.id,"dnaSetCourse('"+d.id+"')",d.n); }).join("")+'</div></div>';
+
+  var data={}, an={};
+  sids.forEach(function(k){ data[k]=denemeChrono(denemelerBy[k],use); an[k]=denemeAnaliz(data[k]); });
+  var section=function(t){ return '<div class="card-ttl" style="font-size:14px;margin:0 0 6px">'+t+'</div>'; };
+
+  // ── Özet: öğrenci başına ──
   sids.forEach(function(k){
-    var items=denemeItems(denemelerBy[k],use); total+=items.length;
-    html+='<div style="font-size:13px;font-weight:800;color:'+ADM_COLORS[k]+';margin:10px 0 2px">'+STUDENTS[k].emoji+' '+STUDENTS[k].short+'</div>'
-      +(items.length?denemeRowsHtml(items,false):'<div style="font-size:12px;color:#767676;font-weight:700;padding:6px 0">Seçili aylarda deneme sonucu yok.</div>');
+    html+='<div class="card" style="border-top:4px solid '+ADM_COLORS[k]+'">'
+      +'<div style="font-size:14px;font-weight:900;color:'+ADM_COLORS[k]+'">'+STUDENTS[k].emoji+' '+STUDENTS[k].name+'</div>'
+      +(an[k]?dnSummaryHtml(an[k])
+        +section('📚 Ders Bazlı Analiz')+dnCourseTableHtml(an[k],dnaCourse)
+        :'<div style="font-size:12px;color:#767676;font-weight:700;padding:8px 0">Seçili aylarda deneme sonucu yok.</div>')
+      +'</div>';
   });
-  if(total>1) html+='<div style="font-size:13px;font-weight:800;color:#555;margin:12px 0 6px">Gelişim: toplam net (düz çizgi) ve tahmini puan (kesikli çizgi)</div>'
-    +'<div style="position:relative;height:240px"><canvas id="adm-deneme" role="img" aria-label="Deneme toplam net ve tahmini puan grafiği"></canvas></div>';
-  return html+'<div style="font-size:11px;color:#767676;font-weight:700;margin-top:8px">≈ puan, '+LGS_PUAN_YILI+' LGS net puanlarıyla yapılan yaklaşık bir tahmindir; resmi puan her yıl sınavın dağılımına göre değişir.</div></div>';
+
+  // ── Karşılaştırma tablosu (iki öğrenci) ──
+  if(both&&an.omer&&an.zeynep){
+    var cols="grid-template-columns:1.5fr 1fr 1fr 1fr";
+    html+='<div class="card">'+section('⚖️ Ders Karşılaştırması')
+      +'<div style="display:grid;'+cols+';gap:4px;font-size:11px;font-weight:800;color:#767676;padding-bottom:4px;border-bottom:2px solid #f3f4f6"><div>Ders (ort. net)</div>'
+      +'<div style="text-align:center;color:'+ADM_COLORS.omer+'">'+STUDENTS.omer.short+'</div><div style="text-align:center;color:'+ADM_COLORS.zeynep+'">'+STUDENTS.zeynep.short+'</div><div style="text-align:center">Fark</div></div>'
+      +LGS_DERSLER.filter(function(d){ return dnaCourse==="all"||dnaCourse===d.id; }).map(function(d){
+        var o=an.omer.courses[d.id], z=an.zeynep.courses[d.id], df=o.avg-z.avg, cell="font-size:12px;font-weight:700;text-align:center;color:#333";
+        return '<div style="display:grid;'+cols+';gap:4px;align-items:center;padding:7px 0;border-bottom:1px solid #f3f4f6"><div style="font-size:12px;font-weight:800;color:#333">'+d.n+'</div>'
+          +'<div style="'+cell+'">'+fnet(o.avg)+'<div style="font-size:10px;color:#767676">%'+num1(o.pct)+'</div></div>'
+          +'<div style="'+cell+'">'+fnet(z.avg)+'<div style="font-size:10px;color:#767676">%'+num1(z.pct)+'</div></div>'
+          +'<div style="'+cell+'">'+dnDelta(df)+'</div></div>';
+      }).join("")
+      +'<div style="font-size:11px;color:#767676;font-weight:700;margin-top:4px">Fark = '+STUDENTS.omer.short+' − '+STUDENTS.zeynep.short+' (ortalama net).</div></div>';
+  }
+
+  // ── Grafikler ──
+  var totalCount=sids.reduce(function(a,k){ return a+data[k].length; },0);
+  html+='<div class="card">'+section('📈 Toplam Net ve Tahmini Puan')
+    +(totalCount>1?'<div style="position:relative;height:240px"><canvas id="dna-total" role="img" aria-label="Deneme toplam net ve tahmini puan grafiği"></canvas></div>'
+      :'<div style="font-size:12px;color:#767676;font-weight:700">Grafik için en az 2 deneme gerekir.</div>')+'</div>';
+  var cLabel=dnaCourse==="all"?"Ders Bazlı Değişim":(LGS_DERSLER.find(function(d){ return d.id===dnaCourse; }).n+" Değişimi");
+  html+='<div class="card">'+section('📊 '+cLabel)+dnMetricBtns();
+  if(dnaCourse==="all"){
+    sids.forEach(function(k){
+      html+='<div style="font-size:13px;font-weight:800;color:'+ADM_COLORS[k]+';margin:8px 0 2px">'+STUDENTS[k].emoji+' '+STUDENTS[k].short+'</div>'
+        +(data[k].length>1?'<div style="position:relative;height:260px"><canvas id="dna-course-'+k+'" role="img" aria-label="'+STUDENTS[k].short+' derslere göre deneme değişim grafiği"></canvas></div>'
+          :'<div style="font-size:12px;color:#767676;font-weight:700;padding:4px 0">Grafik için en az 2 deneme gerekir.</div>');
+    });
+  } else {
+    html+=(totalCount>0?'<div style="position:relative;height:260px"><canvas id="dna-bars" role="img" aria-label="Deneme ders değişimi çubuk grafiği"></canvas></div>':'');
+  }
+  html+='</div>';
+  if(an.omer||an.zeynep){
+    html+='<div class="card">'+section('🕸️ Ders Başarı Profili')
+      +'<div style="position:relative;height:280px"><canvas id="dna-radar" role="img" aria-label="Derslere göre ortalama başarı radar grafiği"></canvas></div>'
+      +'<div style="font-size:11px;color:#767676;font-weight:700;margin-top:4px">Her eksen, dersin ortalama netinin soru sayısına oranıdır (%).</div></div>';
+  }
+
+  // ── Ayrıntı: her deneme için ders tablosu ──
+  html+='<div class="card">'+section('🗂️ Deneme Ayrıntıları');
+  sids.forEach(function(k){
+    var items=data[k].slice().reverse();
+    html+='<div style="font-size:13px;font-weight:800;color:'+ADM_COLORS[k]+';margin:8px 0 2px">'+STUDENTS[k].emoji+' '+STUDENTS[k].short+'</div>'
+      +(items.length?dnDetailHtml(items,denemelerBy[k]):'<div style="font-size:12px;color:#767676;font-weight:700;padding:4px 0">Seçili aylarda deneme yok.</div>');
+  });
+  html+=dnNoteHtml()+'</div>';
+
+  document.getElementById("vw").innerHTML=html;
+  setTimeout(drawCmpDenemeCharts,30);
+}
+
+function drawCmpDenemeCharts(){
+  var use=dnaUseMonths(), sids=dnaStudents.slice(), data={};
+  ["omer","zeynep"].forEach(function(k){ destroyChart("dnaCourse-"+k); });
+  ["dnaTotal","dnaBars","dnaRadar"].forEach(destroyChart);
+  sids.forEach(function(k){ data[k]=denemeChrono(denemelerBy[k],use); });
+
+  drawDenemeTotalChart("dna-total","dnaTotal",sids.map(function(k){ return {label:STUDENTS[k].short,color:ADM_COLORS[k],items:data[k]}; }));
+
+  if(dnaCourse==="all"){
+    sids.forEach(function(k){ drawDenemeCourseChart("dna-course-"+k,"dnaCourse-"+k,data[k],dnMetric,null); });
+  } else {
+    var d=LGS_DERSLER.find(function(x){ return x.id===dnaCourse; }), el=document.getElementById("dna-bars");
+    if(el&&d){
+      var dates={}; sids.forEach(function(k){ data[k].forEach(function(x){ dates[x.r.date]=1; }); });
+      var labels=Object.keys(dates).sort(), pct=dnMetric==="pct";
+      var ds=sids.map(function(k){
+        var by={}; data[k].forEach(function(x){ by[x.r.date]=dnVal(x.s,d,dnMetric); });
+        return {label:STUDENTS[k].short,data:labels.map(function(l){ return by[l]===undefined?null:by[l]; }),backgroundColor:ADM_COLORS[k],borderColor:ADM_COLORS[k],borderWidth:1,borderRadius:4};
+      });
+      _charts["dnaBars"]=new Chart(el,{type:"bar",plugins:[valueLabelsPlugin],data:{labels:labels.map(function(l){ return shortD(l).slice(0,5); }),datasets:ds},
+        options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:16}},
+          plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:12},boxWidth:12}},valueLabels:{all:true,format:function(v){ return pct?"%"+v:String(v); }}},
+          scales:{x:{grid:{display:false},ticks:{font:{family:"Nunito",size:11}}},
+            y:{beginAtZero:true,suggestedMax:pct?100:d.q,grid:{color:"#f3f4f6"},ticks:{font:{family:"Nunito",size:11}},title:{display:true,text:pct?"Başarı %":"Net",font:{size:11}}}}}});
+    }
+  }
+
+  var radarEl=document.getElementById("dna-radar");
+  if(radarEl){
+    var rds=[];
+    sids.forEach(function(k){
+      var a=denemeAnaliz(data[k]); if(!a) return;
+      rds.push({label:STUDENTS[k].short,data:LGS_DERSLER.map(function(d){ return Math.max(0,r1(a.courses[d.id].pct)); }),
+        borderColor:ADM_COLORS[k],backgroundColor:ADM_COLORS[k]+"22",borderWidth:2.5,pointBackgroundColor:ADM_COLORS[k],pointRadius:4});
+    });
+    if(rds.length){
+      _charts["dnaRadar"]=new Chart(radarEl,{type:"radar",data:{labels:LGS_DERSLER.map(function(d){ return d.n; }),datasets:rds},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:12},boxWidth:12}}},
+          scales:{r:{min:0,max:100,ticks:{stepSize:25,font:{size:10},backdropColor:"transparent"},pointLabels:{font:{family:"Nunito",size:11}}}}}});
+    }
+  }
 }
 
 function drawAdmStatsCharts(){
@@ -3050,29 +3340,6 @@ function drawAdmStatsCharts(){
         backgroundColor:ADM_COLORS[k],borderColor:ADM_COLORS[k],borderWidth:1,borderRadius:4};
     });
     _charts["admBars"]=barChart(el,use.map(smLabel),ds,admMetric);
-  }
-
-  // Deneme gelişimi
-  destroyChart("admDeneme");
-  var de=document.getElementById("adm-deneme");
-  if(de){
-    var dates={};
-    sids.forEach(function(k){ denemeItems(denemelerBy[k],use).forEach(function(x){ dates[x.r.date]=1; }); });
-    var labels=Object.keys(dates).sort();
-    var dsets=[];
-    sids.forEach(function(k,i){
-      var byDate={}; denemeItems(denemelerBy[k],use).forEach(function(x){ byDate[x.r.date]=denemeSonuc(x.r.d); });
-      var net=labels.map(function(d){ return byDate[d]?fnet(byDate[d].total):null; });
-      var puan=labels.map(function(d){ return byDate[d]?byDate[d].puan:null; });
-      dsets.push({label:STUDENTS[k].short+" net",data:net,borderColor:ADM_COLORS[k],backgroundColor:ADM_COLORS[k],borderWidth:2.5,pointStyle:"circle",pointRadius:5,tension:0.2,spanGaps:true,yAxisID:"y"});
-      dsets.push({label:STUDENTS[k].short+" puan",data:puan,borderColor:ADM_COLORS[k],backgroundColor:ADM_COLORS[k],borderWidth:2,borderDash:[6,3],pointStyle:"rect",pointRadius:5,tension:0.2,spanGaps:true,yAxisID:"y2"});
-    });
-    _charts["admDeneme"]=new Chart(de,{type:"line",data:{labels:labels.map(function(d){ return shortD(d).slice(0,5); }),datasets:dsets},
-      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
-        plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:11},boxWidth:14,usePointStyle:true}}},
-        scales:{x:{grid:{display:false},ticks:{font:{family:"Nunito",size:11}}},
-          y:{beginAtZero:true,max:90,grid:{color:"#f3f4f6"},ticks:{font:{family:"Nunito",size:11}},title:{display:true,text:"Net",font:{size:11}}},
-          y2:{position:"right",min:100,max:500,grid:{display:false},ticks:{font:{family:"Nunito",size:11}},title:{display:true,text:"Puan",font:{size:11}}}}}});
   }
 }
 
