@@ -82,6 +82,11 @@ Yeni özellikler yeni veri yolları ekler. Kurallar eskiyse ilgili özellik "izi
   Konsolda Rules sekmesine dosyanın güncel halini yapıştırıp Publish edin. İstatistik sayfasındaki "Deneme Sonuçları"
   kartında "okunamadı" yazıyorsa kurallar henüz güncellenmemiştir.
 
+- **Denemede özel soru sayısı (`denemeler/<öğrenci>/<id>/q`):** LGS'den farklı uzunlukta denemeler (örneğin 75 soru) için
+  ders soru sayıları kayda `q` olarak yazılır. `database.rules.json` içindeki güncel `q` alanını ve yükseltilmiş doğru/yanlış
+  sınırını (60) konsolda yayınlayın. Yayınlanmazsa yalnızca özel soru sayılı denemeler "izin yok" hatası verir; LGS düzenindeki
+  (90 soru) denemeler eskisi gibi kaydedilir.
+
 ## Geri dönüş
 
 Sorun çıkarsa Rules sekmesine eski kuralları geri yapıştırıp Publish edin. Site koduna dokunmak gerekmez.

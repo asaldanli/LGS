@@ -236,6 +236,56 @@ test("deneme analizi: tek deneme değişim vermez; en güçlü ve en zayıf ders
   assert.strictEqual(app.denemeAnaliz([]), null);
 });
 
+test("deneme: 75 soruluk deneme ders başarısı LGS soru sayısına ölçeklenerek puanlanır", () => {
+  const q75 = { turkce: 15, matematik: 15, fen: 15, sosyal: 10, din: 10, ingilizce: 10 };
+  assert.strictEqual(app.denemeQToplam(app.denemeQ(q75)), 75);
+  assert.strictEqual(app.denemeQToplam(app.denemeQ(null)), 90);
+  assert.strictEqual(app.denemeQFarkli(app.denemeQ(q75)), true);
+  assert.strictEqual(app.denemeQFarkli(app.denemeQ(null)), false);
+  // hepsi doğru: 75 net, 500 puan
+  const full = DK([15, 0], [15, 0], [15, 0], [10, 0], [10, 0], [10, 0]);
+  const r = app.denemeSonuc(full, q75);
+  assert.strictEqual(r.qTotal, 75); assert.strictEqual(r.total, 75); assert.strictEqual(r.puan, 500);
+  // aynı başarı oranı, farklı uzunluk: LGS'de %80 doğru (16/20, 8/10) ile 75 soruluk %80 doğru (12/15, 8/10) aynı puanı verir
+  const lgs = app.denemeSonuc(DK([16, 0], [16, 0], [16, 0], [8, 0], [8, 0], [8, 0]));
+  const kisa = app.denemeSonuc(DK([12, 0], [12, 0], [12, 0], [8, 0], [8, 0], [8, 0]), q75);
+  assert.strictEqual(kisa.puan, lgs.puan);
+  // aynı ham net, kısa denemede daha yüksek başarıdır: 12 net / 15 soru > 12 net / 20 soru
+  const ayniNet = app.denemeSonuc(DK([12, 0], [12, 0], [12, 0], [8, 0], [8, 0], [8, 0]));
+  assert.ok(kisa.puan > ayniNet.puan);
+  // geçersiz soru sayısı LGS düzenine düşer
+  assert.strictEqual(app.denemeQ({ turkce: 0, matematik: "abc", fen: 99 }).turkce, 20);
+});
+
+test("deneme analizi: farklı uzunluktaki denemelerde başarı % denemeye göre hesaplanır", () => {
+  const src = {
+    a: { date: "2026-09-01", d: DK([20, 0], [10, 0], [10, 0], [5, 0], [5, 0], [5, 0]) },                                   // LGS: Türkçe 20/20 = %100
+    b: { date: "2026-10-01", d: DK([10, 0], [10, 0], [10, 0], [5, 0], [5, 0], [5, 0]), q: { turkce: 15, matematik: 15, fen: 15, sosyal: 10, din: 10, ingilizce: 10 } }, // 10/15 = %66,7
+  };
+  const an = app.denemeAnaliz(app.denemeChrono(src, null));
+  assert.strictEqual(Math.round(an.courses.turkce.pct * 10) / 10, 83.3);   // (100 + 66,7) / 2
+  assert.strictEqual(an.courses.turkce.q, 15);                              // son denemedeki soru sayısı
+  const s2 = app.denemeChrono(src, null)[1].s;
+  assert.strictEqual(app.dnVal(s2, app.LGS_DERSLER[0], "pct"), 66.7);
+  assert.strictEqual(s2.qTotal, 75);
+});
+
+test("deneme analizi: değişim, soru sayısı farklı denemelerde LGS soru sayısına ölçeklenmiş netle hesaplanır", () => {
+  const q75 = { turkce: 15, matematik: 15, fen: 15, sosyal: 10, din: 10, ingilizce: 10 };
+  const src = {
+    a: { date: "2026-09-01", q: q75, d: DK([12, 0], [12, 0], [12, 0], [8, 0], [8, 0], [8, 0]) },   // 75 soruluk: Türkçe 12/15 = %80
+    b: { date: "2026-10-01", d: DK([16, 0], [16, 0], [16, 0], [8, 0], [8, 0], [8, 0]) },            // LGS 90 soruluk: Türkçe 16/20 = %80
+  };
+  const an = app.denemeAnaliz(app.denemeChrono(src, null));
+  // aynı başarı oranı: ham net 12 -> 16 görünse de gerçek değişim 0
+  assert.strictEqual(app.r1(an.courses.turkce.delta), 0);
+  assert.strictEqual(app.r1(an.total.delta), 0);
+  assert.strictEqual(app.r1(an.courses.turkce.last - an.courses.turkce.best), 0);
+  const [sa, sb] = app.denemeChrono(src, null).map((x) => x.s);
+  assert.strictEqual(sa.puan, sb.puan);
+  assert.strictEqual(Math.round(sa.eqTotal), 72);   // 75 soruda 60 net -> LGS 90 soruda 72
+});
+
 test("deneme analizi: grafik değeri net ya da ders başarı yüzdesi", () => {
   const s = app.denemeSonuc(DK([18, 3], [10, 0], [0, 0], [0, 0], [0, 0], [0, 0]));
   const tr = app.LGS_DERSLER[0], din = app.LGS_DERSLER[4];
