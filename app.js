@@ -276,7 +276,7 @@ function resetSessionUI(){
   var admin=["cmp-daily","cmp-weekly","cmp-monthly","cmp-all","cmp-subj","cmp-stats","cmp-deneme","cmp-goals"];
   student.forEach(function(t){ var el=document.getElementById("nb-"+t); if(el){ el.style.display=""; el.className=t==="daily"?"act":""; } });
   admin.forEach(function(t){ var el=document.getElementById("nb-"+t); if(el){ el.style.display="none"; el.className=""; } });
-  var cs=document.getElementById("nb-cmp-stats"); if(cs) cs.textContent="📈 İstatistik";   // öğretmen oturumunda "Karşılaştırma" olur
+  var cs=document.getElementById("nb-cmp-stats"); if(cs) cs.textContent="📈 İstatistik";
   var pill=document.getElementById("ro-pill");
   if(pill){ pill.style.display="none"; pill.textContent="👁️ Salt Okunur"; }
   var ro=document.getElementById("ro-style"); if(ro&&!READONLY) ro.parentNode.removeChild(ro);
@@ -389,14 +389,9 @@ function pickStudent(sid){
       denemeler=snap.val()||{}; denemelerBy[sid]=denemeler; denemeErr=false;
       if(curView==="stats") renderStats(); else if(curView==="cmp-deneme") renderCmpDeneme();
     },function(){ denemeler={}; denemeErr=true; });
-    // Öğretmen hesabı: diğer öğrencinin verisi de okunur; "Karşılaştırma" ve "Deneme Analiz" sekmeleri açılır
+    // Öğretmen hesabı yalnızca seçtiği öğrenciyi görür; ek olarak "Deneme Analiz" sekmesi açılır (karşılaştırma yok)
     if(_teacherMode){
-      var other=sid==="omer"?"zeynep":"omer";
-      var tb=document.getElementById("nb-cmp-stats");
-      if(tb){ tb.textContent="👥 Karşılaştırma"; tb.style.display="flex"; }
       var tdn=document.getElementById("nb-cmp-deneme"); if(tdn) tdn.style.display="flex";
-      db.ref("records/"+other).once("value",function(s2){ cmpRecs=s2.val()||{}; if(curView==="cmp-stats") renderCmpStats(); },function(){});
-      db.ref("denemeler/"+other).once("value",function(s2){ denemelerBy[other]=s2.val()||{}; if(curView==="cmp-deneme") renderCmpDeneme(); },function(){});
     }
     loadProfilePics();
     gv("daily");
@@ -1308,7 +1303,6 @@ function dnAgg(vals){
 function denemeAnaliz(items){
   var n=items.length; if(!n) return null;
   var out={count:n,total:dnAgg(items.map(function(x){ return x.s.total; })),puan:dnAgg(items.map(function(x){ return x.s.puan; })),courses:{}};
-  var best=null, worst=null;
   LGS_DERSLER.forEach(function(d){
     var a=dnAgg(items.map(function(x){ return x.s.nets[d.id]; })), c=0, w=0;
     items.forEach(function(x){ var y=x.r.d&&x.r.d[d.id]; if(y){ c+=y.c||0; w+=y.w||0; } });
@@ -1317,15 +1311,12 @@ function denemeAnaliz(items){
     a.pct=pcts.reduce(function(p,q){ return p+q; },0)/pcts.length;
     a.c=c; a.w=w; a.q=items[n-1].s.q[d.id]; a.id=d.id;
     out.courses[d.id]=a;
-    if(!best||a.pct>best.pct) best=a;
-    if(!worst||a.pct<worst.pct) worst=a;
   });
   // Değişim, denemelerin soru sayıları farklı olabileceğinden LGS soru sayısına ölçeklenmiş netle hesaplanır
   if(n>1){
     out.total.delta=items[n-1].s.eqTotal-items[0].s.eqTotal;
     LGS_DERSLER.forEach(function(d){ out.courses[d.id].delta=items[n-1].s.eq[d.id]-items[0].s.eq[d.id]; });
   }
-  out.strongest=best.id; out.weakest=worst.id;
   return out;
 }
 // Grafik değeri: net ya da ders başarı yüzdesi
@@ -1350,20 +1341,16 @@ function dnSummaryHtml(a){
     +box("Deneme",a.count,"")+box("Ort. net",fnet(a.total.avg),"≈ "+Math.round(a.puan.avg))
     +box("En iyi",fnet(a.total.best),"≈ "+a.puan.best)+box("Son",fnet(a.total.last),dnDelta(a.total.delta))+'</div>';
 }
-// Ders tablosu: ortalama net, başarı %, en iyi, son, ilk denemeye göre değişim; en güçlü ve en zayıf ders işaretlenir
+// Ders tablosu: ortalama net, başarı %, en iyi, son, ilk denemeye göre değişim
 function dnCourseTableHtml(a,onlyId){
   var cols="grid-template-columns:1.5fr .9fr .9fr .9fr .8fr 1.2fr", cell="font-size:12px;font-weight:700;color:#333;text-align:center;min-width:0";
   var html='<div style="display:grid;'+cols+';gap:4px;font-size:11px;font-weight:800;color:#767676;padding-bottom:4px;border-bottom:2px solid #f3f4f6">'
     +'<div>Ders</div><div style="text-align:center">Ort. net</div><div style="text-align:center">Başarı</div><div style="text-align:center">En iyi</div><div style="text-align:center">Son</div><div style="text-align:center">Değişim</div></div>';
   LGS_DERSLER.forEach(function(d){
     if(onlyId&&onlyId!=="all"&&d.id!==onlyId) return;
-    var c=a.courses[d.id], mark="";
-    if(onlyId==="all"||!onlyId){
-      if(d.id===a.strongest) mark='<div style="font-size:10px;font-weight:800;color:#15803d">en güçlü</div>';
-      else if(d.id===a.weakest) mark='<div style="font-size:10px;font-weight:800;color:#b45309">geliştirilmeli</div>';
-    }
+    var c=a.courses[d.id];
     html+='<div style="display:grid;'+cols+';gap:4px;align-items:center;padding:7px 0;border-bottom:1px solid #f3f4f6">'
-      +'<div style="font-size:12px;font-weight:800;color:#333;min-width:0">'+d.n+mark+'</div>'
+      +'<div style="font-size:12px;font-weight:800;color:#333;min-width:0">'+d.n+'</div>'
       +'<div style="'+cell+'">'+fnet(c.avg)+'</div>'
       +'<div style="'+cell+'">%'+num1(c.pct)+'</div>'
       +'<div style="'+cell+'">'+fnet(c.best)+'</div>'
@@ -3245,7 +3232,7 @@ function renderCmpStats(){
 // ═══════════════════════════════════════════════════════════════════
 function dnaDataMonths(){
   var set={};
-  ["omer","zeynep"].forEach(function(k){
+  dnaSids().forEach(function(k){
     var src=denemelerBy[k]||{};
     Object.keys(src).forEach(function(id){ var r=src[id]; if(r&&r.date) set[r.date.slice(0,7)]=1; });
   });
@@ -3263,6 +3250,8 @@ function dnaToggleStudent(sid){
   dnaStudents.sort(); renderCmpDeneme();
 }
 function dnaSetCourse(c){ dnaCourse=c; renderCmpDeneme(); }
+// Analizde gösterilen öğrenciler: yönetici seçtiklerini, öğretmen yalnızca açtığı öğrenciyi görür
+function dnaSids(){ return _teacherMode?[curStudent]:dnaStudents.slice(); }
 
 // Bir denemenin ders ayrıntısı (açılır satır): doğru, yanlış, net, başarı
 function dnDetailHtml(items,src){
@@ -3290,8 +3279,8 @@ function dnDetailHtml(items,src){
 function renderCmpDeneme(){
   var all=dnaDataMonths(), use=dnaUseMonths();
   var sel=dnaMonths.filter(function(m){ return all.indexOf(m)>=0; });
-  var sids=dnaStudents.slice(), both=sids.length>1;
-  var html=adminHeader("Deneme Analiz",both?"İki öğrenci karşılaştırması":STUDENTS[sids[0]].short);
+  var sids=dnaSids(), both=sids.length>1;
+  var html=adminHeader("Deneme Analiz",both?"İki öğrenci karşılaştırması":STUDENTS[sids[0]].name);
   if(!all.length){
     document.getElementById("vw").innerHTML=html+'<div class="card"><div class="empty" style="padding:16px"><div style="font-size:40px;margin-bottom:8px">📝</div><div>Henüz ders bazlı deneme sonucu yok.</div>'
       +'<div style="font-size:12px;color:#767676;font-weight:700;margin-top:6px">Sonuçlar öğrenci hesabında İstatistik &gt; Deneme Sonuçları &gt; Ekle ile girilir.</div></div></div>';
@@ -3301,9 +3290,9 @@ function renderCmpDeneme(){
   html+='<div class="card">'
     +'<div class="card-ttl" style="font-size:14px;margin-bottom:6px">🗓️ Ay</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'
     +chip(!sel.length,"dnaSetMonths([])","Tümü")+all.map(function(m){ var p=parseYM(m); return chip(sel.indexOf(m)>=0,"dnaToggleMonth('"+m+"')",MONTHS[p.m]+' '+p.y); }).join("")+'</div>'
-    +'<div class="card-ttl" style="font-size:14px;margin-bottom:6px">👤 Öğrenci</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">'
-    +["omer","zeynep"].map(function(k){ return chip(sids.indexOf(k)>=0,"dnaToggleStudent('"+k+"')",STUDENTS[k].emoji+' '+STUDENTS[k].short); }).join("")+'</div>'
-    +'<div style="font-size:12px;color:#767676;font-weight:700;margin-bottom:12px">İki öğrenci seçilirse karşılaştırma gösterilir.</div>'
+    +(_teacherMode?'':'<div class="card-ttl" style="font-size:14px;margin-bottom:6px">👤 Öğrenci</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">'
+      +["omer","zeynep"].map(function(k){ return chip(sids.indexOf(k)>=0,"dnaToggleStudent('"+k+"')",STUDENTS[k].emoji+' '+STUDENTS[k].short); }).join("")+'</div>'
+      +'<div style="font-size:12px;color:#767676;font-weight:700;margin-bottom:12px">İki öğrenci seçilirse karşılaştırma gösterilir.</div>')
     +'<div class="card-ttl" style="font-size:14px;margin-bottom:6px">📚 Ders</div><div style="display:flex;gap:6px;flex-wrap:wrap">'
     +chip(dnaCourse==="all","dnaSetCourse('all')","Tüm dersler")+LGS_DERSLER.map(function(d){ return chip(dnaCourse===d.id,"dnaSetCourse('"+d.id+"')",d.n); }).join("")+'</div></div>';
 
@@ -3374,7 +3363,7 @@ function renderCmpDeneme(){
 }
 
 function drawCmpDenemeCharts(){
-  var use=dnaUseMonths(), sids=dnaStudents.slice(), data={};
+  var use=dnaUseMonths(), sids=dnaSids(), data={};
   ["omer","zeynep"].forEach(function(k){ destroyChart("dnaCourse-"+k); });
   ["dnaTotal","dnaBars","dnaRadar"].forEach(destroyChart);
   sids.forEach(function(k){ data[k]=denemeChrono(denemelerBy[k],use); });

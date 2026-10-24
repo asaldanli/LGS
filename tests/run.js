@@ -225,15 +225,32 @@ test("deneme analizi: kronolojik sıra, ay süzme, ortalama, en iyi, son ve ilk 
   assert.ok(an.puan.delta > 0);
 });
 
-test("deneme analizi: tek deneme değişim vermez; en güçlü ve en zayıf ders başarı yüzdesine göre", () => {
+test("deneme analizi: tek deneme değişim vermez, ders başarı yüzdesi hesaplanır; boş liste null", () => {
   const one = { a: { date: "2026-10-01", d: DK([19, 1], [10, 10], [14, 2], [9, 0], [5, 4], [8, 1]) } };
   const an = app.denemeAnaliz(app.denemeChrono(one, null));
   assert.strictEqual(an.count, 1);
   assert.strictEqual(an.total.delta, null);
   assert.strictEqual(an.courses.turkce.delta, null);
-  assert.strictEqual(an.strongest, "turkce");    // 18,67 net / 20 soru = %93 (İnkılap %90, Fen %66,7 ...)
-  assert.strictEqual(an.weakest, "matematik");   // 6,67 net / 20 soru = %33 (Din %36,7)
+  assert.strictEqual(Math.round(an.courses.turkce.pct), 93);     // 18,67 net / 20 soru
+  assert.strictEqual(Math.round(an.courses.matematik.pct), 33);  // 6,67 net / 20 soru
+  assert.strictEqual("strongest" in an, false);                  // "en güçlü / geliştirilmeli" işaretleri kaldırıldı
   assert.strictEqual(app.denemeAnaliz([]), null);
+});
+
+test("deneme analiz ekranı: öğretmen yalnızca açtığı öğrenciyi görür, yönetici seçtiklerini", () => {
+  const a = load("2026-10-24T12:00:00+03:00");
+  a.dnaStudents = ["omer", "zeynep"]; a.curStudent = "zeynep";
+  a._teacherMode = false;
+  assert.deepStrictEqual(Array.from(a.dnaSids()), ["omer", "zeynep"]);
+  a._teacherMode = true;
+  assert.deepStrictEqual(Array.from(a.dnaSids()), ["zeynep"]);
+  a.curStudent = "omer";
+  assert.deepStrictEqual(Array.from(a.dnaSids()), ["omer"]);
+  // öğretmenin ay listesi yalnızca kendi öğrencisinin denemelerinden gelir (diğer öğrencinin verisi görünmez)
+  a.denemelerBy = { omer: { x: { date: "2026-09-10", d: {} } }, zeynep: { y: { date: "2026-10-05", d: {} } } };
+  assert.deepStrictEqual(Array.from(a.dnaDataMonths()), ["2026-09"]);
+  a._teacherMode = false;
+  assert.deepStrictEqual(Array.from(a.dnaDataMonths()), ["2026-09", "2026-10"]);
 });
 
 test("deneme: 75 soruluk deneme ders başarısı LGS soru sayısına ölçeklenerek puanlanır", () => {
