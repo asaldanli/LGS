@@ -1182,11 +1182,12 @@ function updateDenemePreview(){
   if(el) el.innerHTML='<b>Toplam net: '+fnet(r.total)+' / '+r.qTotal+'</b>'
     +'<br><span style="color:var(--p);font-weight:900">≈ '+r.puan+' puan</span> <span style="color:#666">(yaklaşık)</span>';
 }
-// Soru sayılarını LGS düzenine döndürür (form içinde)
-function dnResetQ(){
-  LGS_DERSLER.forEach(function(s){ document.getElementById("dn-q-"+s.id).value=s.q; });
+// Form içindeki soru sayılarını verilen düzene ayarlar (q: {ders: sayı})
+function dnSetQ(q){
+  LGS_DERSLER.forEach(function(s){ document.getElementById("dn-q-"+s.id).value=q[s.id]; });
   updateDenemePreview();
 }
+function dnResetQ(){ var q={}; LGS_DERSLER.forEach(function(s){ q[s.id]=s.q; }); dnSetQ(q); }
 // Yeni denemede başlangıç soru sayıları: öğrencinin en son denemesindeki sayılar, yoksa LGS düzeni
 function dnLastQ(){
   var last=null;
@@ -1217,7 +1218,9 @@ function openDenemeForm(id){
       return '<label style="font-size:11px;font-weight:800;color:#666;text-align:center">'+s.s
         +'<input id="dn-q-'+s.id+'" type="number" inputmode="numeric" min="1" max="60" aria-label="'+s.n+' soru sayısı" value="'+q0[s.id]+'" oninput="updateDenemePreview()" style="'+inp+';font-size:15px;margin-top:2px"></label>';
     }).join("")+'</div>'
-    +'<button type="button" onclick="dnResetQ()" style="margin-top:6px;padding:6px 10px;border-radius:8px;border:2px solid #e5e7eb;background:white;font-size:11px;font-weight:800;color:#555;cursor:pointer;font-family:Nunito,sans-serif">LGS düzenine döndür (90)</button></details>';
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
+    +'<button type="button" onclick="dnSetQ({turkce:15,matematik:15,fen:15,sosyal:10,din:10,ingilizce:10})" style="padding:6px 10px;border-radius:8px;border:2px solid #e5e7eb;background:white;font-size:11px;font-weight:800;color:#555;cursor:pointer;font-family:Nunito,sans-serif">75 soru (15-15-15-10-10-10)</button>'
+    +'<button type="button" onclick="dnResetQ()" style="padding:6px 10px;border-radius:8px;border:2px solid #e5e7eb;background:white;font-size:11px;font-weight:800;color:#555;cursor:pointer;font-family:Nunito,sans-serif">LGS düzeni (90)</button></div></details>';
   var pop=document.createElement("div");
   pop.id="dn-pop"; pop.setAttribute("role","dialog"); pop.setAttribute("aria-modal","true"); pop.setAttribute("aria-label","Deneme sonucu");
   pop.style.cssText="position:fixed;inset:0;background:#0007;z-index:998;display:flex;align-items:flex-start;justify-content:center;padding:14px;overflow:auto";
@@ -1831,6 +1834,31 @@ function tr(s){ return PDF_FONT==="NotoSans" ? String(s||"") : trAscii(s); }
 // ── PDF yazı tipi: Türkçe karakterler için Noto Sans (yalnızca gerekli harfler, ~16 KB; SIL OFL, fonts/LISANS.txt) ──
 var PDF_FONT="helvetica";
 var APP_VERSION=(function(){ try{ var el=document.querySelector('script[src*="app.js"]'); return (el&&el.src.split("?v=")[1])||"0"; }catch(e){ return "0"; } })();
+
+// ── Yeni sürüm denetimi ──
+// Sayfa eski bir sürümle açık kalmışsa (tarayıcı önbelleği ya da uzun süre açık sekme) yenileme önerilir.
+// Yeni sürümü sunucudaki index.html'deki app.js sürüm numarasıyla karşılaştırır; kendiliğinden yenilemez (girişi bölmesin).
+var _verCheckAt=0;
+function checkNewVersion(){
+  if(typeof fetch!=="function"||APP_VERSION==="0") return;
+  var now=Date.now(); if(now-_verCheckAt<300000) return; _verCheckAt=now;
+  fetch("index.html?_="+now,{cache:"no-store"}).then(function(r){ return r.ok?r.text():""; }).then(function(t){
+    var m=t.match(/app\.js\?v=([\w.-]+)/);
+    if(m&&m[1]!==APP_VERSION) showUpdateBanner();
+  }).catch(function(){});
+}
+function showUpdateBanner(){
+  if(document.getElementById("upd-bar")) return;
+  var bar=document.createElement("div");
+  bar.id="upd-bar"; bar.setAttribute("role","status");
+  bar.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:1001;background:#1f2937;color:white;border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:10px;box-shadow:0 6px 24px #0005;font-size:13px;font-weight:800;max-width:420px;margin:0 auto";
+  bar.innerHTML='<span style="flex:1">🔄 Yeni sürüm var. Yenileyince güncel hâli açılır.</span>'
+    +'<button style="padding:8px 12px;border-radius:10px;border:none;background:#4F46E5;color:white;font-weight:900;font-size:13px;cursor:pointer;font-family:Nunito,sans-serif" onclick="flushPendingWrites();location.reload()">Yenile</button>'
+    +'<button aria-label="Kapat" style="background:none;border:none;color:#d1d5db;font-size:18px;cursor:pointer" onclick="this.parentNode.parentNode.removeChild(this.parentNode)">×</button>';
+  document.body.appendChild(bar);
+}
+window.addEventListener("load",function(){ setTimeout(checkNewVersion,4000); });
+document.addEventListener("visibilitychange",function(){ if(document.visibilityState==="visible") checkNewVersion(); });
 var _pdfFonts=null, _pdfFontsState="idle", _pdfWaiters=[];   // idle | loading | ready | failed
 function bufToB64(buf){
   var b=new Uint8Array(buf), s="", i, CH=0x8000;
