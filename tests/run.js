@@ -336,5 +336,24 @@ test("kayıt: sekme kapanırken bekleyen değer hemen yazılır, çift yazım ol
   assert.strictEqual(writes.length, 3);
 });
 
+test("toplam net grafiği: aynı gündeki her deneme ayrı nokta olur, öğrenciler gün içi sırayla hizalanır", () => {
+  const a = load("2026-10-26T12:00:00+03:00");
+  let cfg = null;
+  a.Chart = function (el, c) { cfg = c; };
+  const mk = (date, total, puan) => ({ r: { date }, s: { total, puan, qTotal: 90 } });
+  // tek öğrenci: 25/10 günü üç deneme
+  a.drawDenemeTotalChart("x", "k", [{ label: "", color: "#000", items: [mk("2026-10-24", 70, 400), mk("2026-10-25", 60, 380), mk("2026-10-25", 75, 420), mk("2026-10-25", 80, 450)] }]);
+  assert.strictEqual(cfg.data.labels.length, 4);
+  assert.deepStrictEqual(Array.from(cfg.data.datasets[0].data), [70, 60, 75, 80].map((v) => a.fnet(v)));
+  assert.deepStrictEqual(Array.from(cfg.data.datasets[1].data), [400, 380, 420, 450]);
+  assert.strictEqual(cfg.options.plugins.tooltip.callbacks.title([{ dataIndex: 2 }]).includes("2. deneme"), true);
+  // iki öğrenci: aynı günün aynı sıradaki denemeleri aynı konumda
+  a.drawDenemeTotalChart("x", "k2", [
+    { label: "A", color: "#111", items: [mk("2026-10-25", 60, 380), mk("2026-10-25", 70, 400)] },
+    { label: "B", color: "#222", items: [mk("2026-10-25", 50, 350), mk("2026-10-26", 55, 360)] }]);
+  assert.strictEqual(cfg.data.labels.length, 3);   // 25#01, 25#02, 26#01
+  assert.strictEqual(cfg.data.datasets[2].data[1], null);   // B'nin 25/10 ikinci denemesi yok
+});
+
 console.log("\n" + passed + " test geçti");
 process.exit(0);   // bekleyen zamanlayıcılar süreci açık tutmasın

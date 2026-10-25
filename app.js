@@ -1382,19 +1382,34 @@ function drawDenemeCourseChart(elId,key,items,metric,only){
 function drawDenemeTotalChart(elId,key,series){
   destroyChart(key);
   var el=document.getElementById(elId); if(!el) return;
-  var dates={}, maxQ=1; series.forEach(function(s){ s.items.forEach(function(x){ dates[x.r.date]=1; if(x.s.qTotal>maxQ) maxQ=x.s.qTotal; }); });
-  var labels=Object.keys(dates).sort();
-  if(labels.length<2) return;
-  var ds=[];
-  series.forEach(function(s){
-    var by={}; s.items.forEach(function(x){ by[x.r.date]=x.s; });
-    var one=series.length===1;
-    ds.push({label:(one?"Toplam net":s.label+" net"),data:labels.map(function(d){ return by[d]?fnet(by[d].total):null; }),borderColor:s.color,backgroundColor:s.color,borderWidth:2.5,pointStyle:"circle",pointRadius:5,tension:0.2,spanGaps:true,yAxisID:"y"});
-    ds.push({label:(one?"Tahmini puan":s.label+" puan"),data:labels.map(function(d){ return by[d]?by[d].puan:null; }),borderColor:s.color,backgroundColor:s.color,borderWidth:2,borderDash:[6,3],pointStyle:"rect",pointRadius:5,tension:0.2,spanGaps:true,yAxisID:"y2"});
+  // Her deneme ayrı bir nokta olur (ders bazlı grafikteki gibi). Aynı gün birden fazla deneme varsa gün içindeki sırası kullanılır;
+  // birden fazla öğrenci karşılaştırılırken aynı günün aynı sıradaki denemeleri aynı konumda hizalanır.
+  var slots={}, maxQ=1, perSeries=series.map(function(s){
+    var seen={}, by={};
+    s.items.forEach(function(x){
+      seen[x.r.date]=(seen[x.r.date]||0)+1;
+      var slot=x.r.date+"#"+("0"+seen[x.r.date]).slice(-2);
+      by[slot]=x.s; slots[slot]=1;
+      if(x.s.qTotal>maxQ) maxQ=x.s.qTotal;
+    });
+    return by;
   });
-  _charts[key]=new Chart(el,{type:"line",data:{labels:labels.map(function(d){ return shortD(d).slice(0,5); }),datasets:ds},
+  var labels=Object.keys(slots).sort();
+  if(labels.length<2) return;
+  var perDay={}; labels.forEach(function(sl){ var d=sl.split("#")[0]; perDay[d]=(perDay[d]||0)+1; });
+  var ds=[];
+  series.forEach(function(s,si){
+    var by=perSeries[si], one=series.length===1;
+    ds.push({label:(one?"Toplam net":s.label+" net"),data:labels.map(function(sl){ return by[sl]?fnet(by[sl].total):null; }),borderColor:s.color,backgroundColor:s.color,borderWidth:2.5,pointStyle:"circle",pointRadius:5,tension:0.2,spanGaps:true,yAxisID:"y"});
+    ds.push({label:(one?"Tahmini puan":s.label+" puan"),data:labels.map(function(sl){ return by[sl]?by[sl].puan:null; }),borderColor:s.color,backgroundColor:s.color,borderWidth:2,borderDash:[6,3],pointStyle:"rect",pointRadius:5,tension:0.2,spanGaps:true,yAxisID:"y2"});
+  });
+  _charts[key]=new Chart(el,{type:"line",data:{labels:labels.map(function(sl){ return shortD(sl.split("#")[0]).slice(0,5); }),datasets:ds},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
-      plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:11},boxWidth:14,usePointStyle:true}}},
+      plugins:{legend:{position:"bottom",labels:{font:{family:"Nunito",size:11},boxWidth:14,usePointStyle:true}},
+        tooltip:{callbacks:{title:function(items){
+          var sl=labels[items[0].dataIndex], d=sl.split("#")[0];
+          return shortD(d).slice(0,5)+(perDay[d]>1?" · "+parseInt(sl.split("#")[1],10)+". deneme":"");
+        }}}},
       scales:{x:{grid:{display:false},ticks:{font:{family:"Nunito",size:11}}},
         y:{beginAtZero:true,max:maxQ,grid:{color:"#f3f4f6"},ticks:{font:{family:"Nunito",size:11}},title:{display:true,text:"Net",font:{size:11}}},
         y2:{position:"right",min:100,max:500,grid:{display:false},ticks:{font:{family:"Nunito",size:11}},title:{display:true,text:"Puan",font:{size:11}}}}}});
